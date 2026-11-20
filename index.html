@@ -432,7 +432,9 @@ function shell(inner){ $("#app").innerHTML=inner; }
 function head(c,h1,sub){ return `<div class="stage"><span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(c.title||"Intercambio")}</span><h1>${h1}</h1>${sub?`<p style="opacity:.85;margin:0">${sub}</p>`:""}
   ${(c.budget||c.date)?`<div class="meta" style="margin-top:12px">${c.budget?`<span class="chip" style="color:var(--ink)">💰 Presupuesto: ${esc(c.budget)}</span>`:""}${c.date?`<span class="chip" style="color:var(--ink)">📅 ${esc(c.date)}</span>`:""}</div>`:""}</div>`; }
 
-async function renderJoin(ev){ $("#app").classList.remove("wide");
+// Pide al navegador que no borre lo que guarda esta página (cuando lo permite, sin preguntar)
+function keepStorage(){ try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){}); }catch(e){} }
+async function renderJoin(ev){ keepStorage(); $("#app").classList.remove("wide");
   clearInterval(PIV);
   shell(`<div class="tombola"><div class="spin"></div><p>Cargando…</p></div>`);
   let d; try{ d=await dbGet(ev); }catch(e){ shell(`<div class="stage"><h1>Sin conexión 📶</h1><div class="card" style="color:var(--ink)">No pude cargar el intercambio. Revisa tu internet.<br><br><button class="btn red block" onclick="route()">Intentar otra vez</button></div></div>`); return; }
