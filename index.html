@@ -245,7 +245,7 @@ function renderOrg(){
 
     ${n?`<div class="card">
       <h2>📲 Link para todos</h2>
-      <p class="hint" style="margin-top:0">Es el mismo link para todos. Cada quien elige quién es (ya no lo puede cambiar), escribe su regalo y, cuando hagas el sorteo, ahí mismo gira su ruleta.</p>
+      <p class="hint" style="margin-top:0">Es el mismo link para todos. Cada quien elige quién es (ya no lo puede cambiar), escribe su regalo y, cuando actives las ruletas, ahí mismo gira la suya.</p>
       <div class="row" style="margin-top:10px">
         <a class="btn wa" id="gl-wa" target="_blank" rel="noopener" href="#">Mandar al grupo</a>
         <button class="btn ghost small" id="gl-copy">Copiar link</button>
@@ -254,13 +254,13 @@ function renderOrg(){
     </div>`:""}
 
     <div class="card">
-      <h2>🎲 Sorteo</h2>
+      <h2>🎰 Ruletas</h2>
       ${!drawn?`
-        <p class="hint" style="margin-top:0">Hazlo cuando quieras. Si alguien pone su regalo después, igual le sale a quien le tocó.</p>
-        <button class="btn gold block" id="go" ${n<3?"disabled":""} style="margin-top:8px">🎲 Hacer el sorteo ${n<3?`(faltan ${3-n})`:""}</button>`
+        <p class="hint" style="margin-top:0">Actívalas cuando todos ya hayan puesto su regalo. Se arman las parejas por dentro (nadie se repite ni se toca a sí mismo) y cada quien gira su ruleta para ver a quién le tocó.</p>
+        <button class="btn gold block" id="go" ${n<3?"disabled":""} style="margin-top:8px">🎰 Activar las ruletas ${n<3?`(faltan ${3-n})`:""}</button>`
       :`
-        <div class="ok" style="margin-top:0" id="spuncount">✅ Sorteo hecho</div>
-        ${changed?`<div class="confirm">Cambiaste participantes después del sorteo. Usa <b>"Repetir el sorteo"</b> abajo para que entren todos.</div>`:""}
+        <div class="ok" style="margin-top:0" id="spuncount">✅ Ruletas activadas</div>
+        ${changed?`<div class="confirm">Cambiaste participantes después de activar las ruletas. Usa <b>"Volver a armar las parejas"</b> abajo para que entren todos.</div>`:""}
         ${S.spoil?`<div class="spoiler">${dl.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}<span class="pphone" style="width:100%;font-weight:600">🎁 ${esc(wishOf(p.r)||"Sin regalo todavía")}</span></div>`).join("")}</div>
           <button class="linkbtn" id="hide">Ocultar</button>`
         :`<button class="btn ghost block" id="spoil" style="margin-top:8px">👀 Ver quién le tocó a quién</button>`}
@@ -269,9 +269,9 @@ function renderOrg(){
 
     <div class="card">
       <h2>⚙️ Reiniciar</h2>
-      ${drawn?`<button class="btn ghost block" id="redraw">🔄 Repetir el sorteo</button><p class="hint">Se queda quién es quién y sus regalos; solo cambia a quién le toca. Todos vuelven a girar.</p>`:""}
+      ${drawn?`<button class="btn ghost block" id="redraw">🔄 Volver a armar las parejas</button><p class="hint">Se queda quién es quién y sus regalos; solo cambia a quién le toca. Todos vuelven a girar.</p>`:""}
       <button class="btn ghost block" id="reset" style="margin-top:8px">♻️ Reiniciar todo el intercambio</button>
-      <p class="hint">Borra quién eligió cada nombre, los regalos y el sorteo. El link sigue siendo el mismo y todos vuelven a elegir quiénes son.</p>
+      <p class="hint">Borra quién eligió cada nombre, los regalos y las parejas. El link sigue siendo el mismo y todos vuelven a elegir quiénes son.</p>
       <div id="confirm-box"></div>
       <p class="hint" style="margin-top:14px">🔑 <a class="linkbtn" style="font-size:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `🔑 Mi link de organizador del ${S.title} (no lo compartas):\n${adminLink()}`)}">Mandarme mi link de organizador</a> — para abrir esta pantalla desde otro celular.</p>
     </div>
@@ -304,19 +304,19 @@ function renderOrg(){
   const go=$("#go"); if(go) go.onclick=()=>{
     const faltan=S.people.filter(p=>!wishOf(p.name)).map(p=>p.name);
     if(!faltan.length) return startDraw();
-    ask(`Faltan ${faltan.length} por poner su regalo: ${faltan.map(esc).join(", ")}. Hasta que lo guarden no pueden girar su ruleta. ¿Hacer el sorteo de todos modos?`,"Sí, sortear",startDraw);
+    ask(`Faltan ${faltan.length} por poner su regalo: ${faltan.map(esc).join(", ")}. Hasta que lo guarden no pueden girar su ruleta. ¿Activar las ruletas de todos modos?`,"Sí, activar",startDraw);
   };
   const sp=$("#spoil"); if(sp) sp.onclick=()=>{ S.spoil=true; save(); renderOrg(); };
   const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderOrg(); };
   // reiniciar
-  const rd=$("#redraw"); if(rd) rd.onclick=()=>ask("¿Repetir el sorteo? A todos les puede tocar otra persona y tienen que volver a girar.","Sí, repetir",async()=>{ await dbDel(`${S.ev}/spun`).catch(()=>{}); startDraw(); });
-  $("#reset").onclick=()=>ask("¿Reiniciar todo? Se borran los nombres elegidos, los regalos y el sorteo.","Sí, reiniciar",async()=>{
+  const rd=$("#redraw"); if(rd) rd.onclick=()=>ask("¿Volver a armar las parejas? A todos les puede tocar otra persona y tienen que volver a girar.","Sí, repetir",async()=>{ await dbDel(`${S.ev}/spun`).catch(()=>{}); startDraw(); });
+  $("#reset").onclick=()=>ask("¿Reiniciar todo? Se borran los nombres elegidos, los regalos y las parejas.","Sí, reiniciar",async()=>{
     try{ await Promise.all(["claims","wishes","spun","draw"].map(x=>dbDel(`${S.ev}/${x}`))); }catch(e){}
     LIVE={claims:{},wishes:{},spun:{},draw:null}; S.spoil=false; save(); renderOrg(); });
   paintStatus();
 }
 function refreshLinks(){
-  const a=$("#gl-wa"); if(a) a.href=waLink("", `🎁 ¡Hola! Ya está el ${S.title}. Entra aquí, elige quién eres y escribe qué regalo quieres${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}. Cuando se haga el sorteo, en este mismo link giras tu ruleta para ver a quién le regalas 🎰\n${groupLink()}`);
+  const a=$("#gl-wa"); if(a) a.href=waLink("", `🎁 ¡Hola! Ya está el ${S.title}. Entra aquí, elige quién eres y escribe qué regalo quieres${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}. Cuando se activen las ruletas, en este mismo link giras la tuya para ver a quién le regalas 🎰\n${groupLink()}`);
 }
 function paintStatus(){
   const net=$("#net"); if(net) net.textContent = NET ? "" : "⚠️ Sin conexión a la base de datos. Revisa tu internet.";
@@ -327,7 +327,7 @@ function paintStatus(){
     const inp=$(`[data-wish="${i}"]`); if(inp && inp!==document.activeElement && !wishT[p.name+"_typing"]) inp.value=wishOf(p.name);
   });
   const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${S.people.length} ya entraron · ${wi} ya pusieron su regalo`;
-  const sc=$("#spuncount"); if(sc) sc.textContent=`✅ Sorteo hecho · ${sp} de ${drawList().length} ya giraron su ruleta`;
+  const sc=$("#spuncount"); if(sc) sc.textContent=`✅ Ruletas activadas · ${sp} de ${drawList().length} ya giraron`;
 }
 async function refreshOrg(){ try{ await pull(); NET=true; }catch(e){ NET=false; } paintStatus(); }
 
@@ -422,12 +422,12 @@ function renderMe(ev,k,d){
   };
   const rb=$("#rbody");
   if(!dr){
-    rb.innerHTML=`<p style="margin:0">${myWish?"✅ Ya guardaste tu regalo. ":"👆 Primero guarda qué regalo quieres. "}⏳ Todavía no se hace el sorteo. Cuando ${esc(c.org)} lo haga, aquí te va a salir tu ruleta.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
+    rb.innerHTML=`<p style="margin:0">${myWish?"✅ Ya guardaste tu regalo. ":"👆 Primero guarda qué regalo quieres. "}⏳ Todavía no se activan las ruletas. Cuando ${esc(c.org)} las active, aquí te va a salir la tuya.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
     PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
     return;
   }
   if(myDraw && !myWish){ rb.innerHTML=`<p style="margin:0">👆 Primero guarda qué regalo quieres. Luego aquí te aparece tu ruleta.</p>`; return; }
-  if(!myDraw){ rb.innerHTML=`<p style="margin:0">No estás en este sorteo. Avísale a ${esc(c.org)} para que lo repita.</p>`; return; }
+  if(!myDraw){ rb.innerHTML=`<p style="margin:0">No estás en las ruletas. Avísale a ${esc(c.org)} para que lo repita.</p>`; return; }
   const r=myDraw[1];
   const result=()=>`
     <div class="lbl" style="text-align:center">Te tocó darle regalo a</div>
