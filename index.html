@@ -394,7 +394,7 @@ function paintStatus(){
   let cl=0,wi=0,sp=0,selfN=0;
   S.people.forEach((p,i)=>{
     const k=keyOf(p.name), by=effBy(p,S.people), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; if(!by){ cl+=c; selfN++; } wi+=w; sp+=s;
-    const el=$("#st-"+i); if(el) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
+    const el=$("#st-"+i); if(el && FREEING!==k) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
     if(!EDITW[i]) paintWish(i);
   });
   const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${selfN} ya entraron · ${wi} de ${S.people.length} regalos puestos`;
@@ -569,8 +569,24 @@ function confetti(){
   let f=0; (function step(){ x.clearRect(0,0,c.width,c.height); P.forEach(p=>{ p.vy+=.45; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.r+=p.vr; x.save(); x.translate(p.x,p.y); x.rotate(p.r); x.fillStyle=p.c; x.fillRect(-p.s/2,-p.s/3,p.s,p.s*.6); x.restore(); }); if(++f<170) requestAnimationFrame(step); else x.clearRect(0,0,c.width,c.height); })();
 }
 
-document.addEventListener("click",e=>{ const b=e.target.closest("[data-free]"); if(!b) return; const k=b.dataset.free;
-  b.textContent="Liberando…"; dbDel(`${S.ev}/claims/${k}`).then(()=>{ delete LIVE.claims[k]; paintStatus(); }).catch(()=>{ b.textContent="Error, intenta de nuevo"; }); });
+// Liberar un nombre: primero pregunta, para no hacerlo por error
+let FREEING=null;
+document.addEventListener("click",e=>{
+  const b=e.target.closest("[data-free]");
+  if(b){ const k=b.dataset.free, i=S.people.findIndex(p=>keyOf(p.name)===k), p=S.people[i]; if(!p) return;
+    FREEING=k; const box=$("#st-"+i);
+    const w=wishOf(p.name);
+    box.innerHTML=`<div class="confirm" style="width:100%;margin-top:4px"><b>¿Seguro que quieres liberar a ${esc(p.name)}?</b><br>Tendrá que volver a elegir su nombre.${w?" Su regalo no se borra.":""}
+      <div class="row" style="margin-top:10px"><button class="btn ghost small" data-free-no="${i}">No</button><button class="btn red small" data-free-yes="${i}">Sí, liberar</button></div></div>`;
+    return; }
+  const no=e.target.closest("[data-free-no]"); if(no){ FREEING=null; paintStatus(); return; }
+  const yes=e.target.closest("[data-free-yes]");
+  if(yes){ const i=+yes.dataset.freeYes, p=S.people[i]; if(!p) return; const k=keyOf(p.name);
+    yes.disabled=true; yes.textContent="Liberando…";
+    dbDel(`${S.ev}/claims/${k}`).then(()=>{ delete LIVE.claims[k]; FREEING=null; paintStatus(); })
+      .catch(()=>{ yes.disabled=false; yes.textContent="Error, intenta de nuevo"; });
+  }
+});
 
 // ================== Router ==================
 function route(){
