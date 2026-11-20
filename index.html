@@ -137,6 +137,7 @@
   .by{font:inherit;font-size:13px;font-weight:700;padding:5px 8px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);max-width:60%}
   .rsec{margin-top:16px;padding-top:14px;border-top:2px dashed var(--line)}
   .rsec h3{font-family:"Baloo 2";font-size:19px;margin:0 0 8px}
+  .glink{display:inline-block;color:var(--red);font-weight:800;text-decoration:underline;word-break:break-all;margin:2px 0}
   .namechip.taken{opacity:.45;cursor:not-allowed}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
@@ -160,6 +161,15 @@ const COLORS = ["#c8202f","#1f8a52","#c98f22","#2f6db5","#8a3fb5","#d2582a","#0f
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+// Convierte los links escritos en el regalo en links que se pueden abrir
+function linkify(t){
+  return esc(t).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])|(\b(?:www\.)[^\s<]+[^\s<.,;:!?)\]'"])/gi, m=>{
+    const href=(/^https?:/i.test(m)?m:"https://"+m).replace(/&amp;/g,"&");
+    let label=m.replace(/^https?:\/\//i,"").replace(/^www\./i,""); const host=label.split("/")[0];
+    label = label.length>32 ? host+"/…" : label;
+    return `<a class="glink" href="${esc(href)}" target="_blank" rel="noopener">🔗 ${label}</a>`;
+  });
+}
 const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
 const colorFor = n => { let h=0; for (const c of n) h=(h*31+c.charCodeAt(0))>>>0; return COLORS[h%COLORS.length]; };
 const keyOf = n => String(n).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "x";
@@ -203,7 +213,7 @@ let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
 function drawList(){ if(!LIVE.draw) return []; return Object.values(LIVE.draw).map(decode).filter(Boolean).map(([g,r])=>({g,r})); }
-let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,300),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
+let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,800),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
 
 function doDraw(names, people){
   const resp={}; (people||[]).forEach(p=>{ const b=effBy(p,people); if(b) resp[p.name]=b; });
@@ -255,7 +265,7 @@ function renderOrg(){
               <option value="">Él/ella mismo(a)</option>
               ${S.people.filter(o=>o!==p && !effBy(o,S.people) && !S.people.some(x=>x!==o && effBy(x,S.people)===p.name && false)).map(o=>`<option value="${esc(o.name)}" ${effBy(p,S.people)===o.name?"selected":""}>${esc(o.name)}</option>`).join("")}
             </select></label>
-          <input class="wish" data-wish="${i}" value="${esc(wishOf(p.name))}" placeholder="🎁 Regalo que quiere" maxlength="300"></div>
+          <input class="wish" data-wish="${i}" value="${esc(wishOf(p.name))}" placeholder="🎁 Regalo que quiere" maxlength="800"></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
       <div class="ok" id="counts"></div>
@@ -279,7 +289,7 @@ function renderOrg(){
       :`
         <div class="ok" style="margin-top:0" id="spuncount">✅ Ruletas activadas</div>
         ${changed?`<div class="confirm">Cambiaste participantes después de activar las ruletas. Usa <b>"Volver a armar las parejas"</b> abajo para que entren todos.</div>`:""}
-        ${S.spoil?`<div class="spoiler">${dl.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}<span class="pphone" style="width:100%;font-weight:600">🎁 ${esc(wishOf(p.r)||"Sin regalo todavía")}</span></div>`).join("")}</div>
+        ${S.spoil?`<div class="spoiler">${dl.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}<span class="pphone" style="width:100%;font-weight:600">🎁 ${wishOf(p.r)?linkify(wishOf(p.r)):"Sin regalo todavía"}</span></div>`).join("")}</div>
           <button class="linkbtn" id="hide">Ocultar</button>`
         :`<button class="btn ghost block" id="spoil" style="margin-top:8px">👀 Ver quién le tocó a quién</button>`}
         <a class="btn wa block" style="margin-top:10px;padding:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `📋 ${S.title} — resultados:\n`+dl.map(p=>`• ${p.g} → ${p.r}${wishOf(p.r)?` (🎁 ${wishOf(p.r)})`:""}`).join("\n"))}">Mandarme la lista a mi WhatsApp</a>`}
@@ -426,10 +436,10 @@ function renderMe(ev,k,d){
     <div class="card" style="margin-top:${i?0:18}px" id="pc-${i}">
       <h2>${p.self?"🎁 Tu regalo":`🧒 ${esc(p.name)}`}</h2>
       ${p.self?"":`<p class="hint" style="margin-top:-6px">Tú eliges por ${esc(p.name)}: escribe su regalo y gira su ruleta.</p>`}
-      <div id="wview-${i}" style="${w?"":"display:none"}"><div class="giftwish" style="margin-top:0"><b>${p.self?"Pediste":"Pidió"}</b><div id="wtxt-${i}">${esc(w)}</div></div><button class="linkbtn" data-wedit="${i}">Cambiar regalo</button></div>
+      <div id="wview-${i}" style="${w?"":"display:none"}"><div class="giftwish" style="margin-top:0"><b>${p.self?"Pediste":"Pidió"}</b><div id="wtxt-${i}">${linkify(w)}</div></div><button class="linkbtn" data-wedit="${i}">Cambiar regalo</button></div>
       <div id="wform-${i}" style="${w?"display:none":""}">
-        <textarea id="w-${i}" maxlength="300" placeholder="${p.self?"Ej. Una sudadera talla M color negro, o unos audífonos":`¿Qué regalo quiere ${esc(p.name)}?`}">${esc(w)}</textarea>
-        <p class="hint">${c.budget?`Hasta <b>${esc(c.budget)}</b>. `:""}Pueden ser varias opciones, talla, color o tienda.</p>
+        <textarea id="w-${i}" maxlength="800" placeholder="${p.self?"Ej. Una sudadera talla M color negro, o unos audífonos":`¿Qué regalo quiere ${esc(p.name)}?`}">${esc(w)}</textarea>
+        <p class="hint">${c.budget?`Hasta <b>${esc(c.budget)}</b>. `:""}Pueden ser varias opciones, talla, color, tienda o el link del producto.</p>
         <button class="btn red block" data-wsave="${i}" style="margin-top:8px">Guardar ${p.self?"mi":"su"} regalo</button>
         <div class="err" id="werr-${i}"></div>
       </div>
@@ -444,7 +454,7 @@ function renderMe(ev,k,d){
     $(`[data-wsave="${i}"]`).onclick=async e=>{
       const w=$("#w-"+i).value.trim(), b=e.currentTarget; if(!w){ $("#werr-"+i).textContent="Escribe qué regalo quiere."; return; }
       b.disabled=true; const lbl=b.textContent; b.textContent="Guardando…";
-      try{ await dbPut(`${ev}/wishes/${pk}`,{name:p.name,wish:w.slice(0,300),t:Date.now()}); $("#wtxt-"+i).textContent=w; $("#wform-"+i).style.display="none"; $("#wview-"+i).style.display=""; $("#werr-"+i).textContent="";
+      try{ await dbPut(`${ev}/wishes/${pk}`,{name:p.name,wish:w.slice(0,800),t:Date.now()}); $("#wtxt-"+i).innerHTML=linkify(w); $("#wform-"+i).style.display="none"; $("#wview-"+i).style.display=""; $("#werr-"+i).textContent="";
         if(!hadWish){ hadWish=true; confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); } }
       catch(err){ $("#werr-"+i).textContent="No se pudo guardar. Revisa tu internet."; }
       b.disabled=false; b.textContent=lbl;
@@ -458,7 +468,7 @@ function renderMe(ev,k,d){
     const result=()=>`
       <div class="lbl" style="text-align:center">${p.self?"Te tocó darle regalo a":`A ${esc(p.name)} le tocó darle regalo a`}</div>
       <div class="who" style="text-align:center">${esc(r)}</div>
-      <div class="giftwish"><b>🎁 Lo que quiere</b><div>${esc(((d.wishes||{})[keyOf(r)]||{}).wish||"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉")}</div></div>
+      <div class="giftwish"><b>🎁 Lo que quiere</b><div>${((d.wishes||{})[keyOf(r)]||{}).wish?linkify(d.wishes[keyOf(r)].wish):"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉"}</div></div>
       <p class="secret" style="text-align:center">🤫 Es secreto, no le digas a nadie.</p>
       ${c.orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(c.orgPhone, `✅ Ya giré la ruleta${p.self?"":` de ${p.name}`} del ${c.title} — ${me}`)}">Avisarle a ${esc(c.org)}</a>`:""}`;
     if((d.spun||{})[pk]){ rb.innerHTML=result(); return; }
