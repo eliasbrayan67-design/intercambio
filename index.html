@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Intercambio de regalos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap"></noscript>
 <style>
   :root{
     --pine:#0e3a2c; --pine2:#14523e; --cream:#fff8ec; --ink:#2a1d14; --muted:#7a6a5c;
@@ -153,9 +154,14 @@
 <body>
 <div class="snow"></div>
 <canvas id="cf"></canvas>
-<div class="wrap" id="app"></div>
+<div class="wrap" id="app"><div class="stage" style="padding-top:60px;text-align:center;color:#fff8ec"><h1>Cargando… 🎁</h1><p style="opacity:.85">Si no carga en unos segundos, toca los tres puntitos (⋯) y elige <b>"Abrir en Safari"</b> o <b>"Abrir en Chrome"</b>.</p></div></div>
 
 <script>
+// ================== Si algo falla, avisar en pantalla ==================
+function showFail(msg){ try{ document.getElementById("app").innerHTML='<div class="stage" style="padding-top:40px"><h1>Algo falló 😕</h1><div class="card" style="color:#2a1d14">No se pudo abrir bien en este celular.<br><br>1. Toca <b>Recargar</b>.<br>2. Si sigue igual, toca los tres puntitos (⋯) y elige <b>"Abrir en Safari"</b> o <b>"Abrir en Chrome"</b>.<br><br><button class="btn red block" onclick="location.reload()">Recargar</button><p class="hint" style="margin-top:10px">Detalle: '+String(msg).replace(/[<>&]/g,"")+'</p></div></div>'; }catch(e){} }
+window.addEventListener("error",function(e){ showFail(e.message||"error"); });
+window.addEventListener("unhandledrejection",function(e){ showFail((e.reason&&e.reason.message)||"error de conexión"); });
+
 // ================== Configuración ==================
 const BASE_URL = (/^https?:$/.test(location.protocol) && !/claude|usercontent|sandbox/i.test(location.hostname))
   ? location.origin + location.pathname : "https://eliasbrayan67-design.github.io/intercambio/";
@@ -167,7 +173,7 @@ const COLORS = ["#c8202f","#1f8a52","#c98f22","#2f6db5","#8a3fb5","#d2582a","#0f
 // ================== Utilidades ==================
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
-const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const esc = s => String(s==null?"":s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 // Convierte los links escritos en el regalo en links que se pueden abrir
 function linkify(t){
   return esc(t).replace(/(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])|(\b(?:www\.)[^\s<]+[^\s<.,;:!?)\]'"])/gi, m=>{
@@ -197,9 +203,10 @@ function decode(h){ try{ if(!h||!h.startsWith("x")) return null; return JSON.par
 
 // ================== Base de datos ==================
 const dbUrl = p => `${DB_URL}/intercambio/${p}.json`;
-async function dbGet(p){ const r=await fetch(dbUrl(p),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); return r.json(); }
-async function dbPut(p,v){ const r=await fetch(dbUrl(p),{method:"PUT",body:JSON.stringify(v)}); if(!r.ok) throw new Error(r.status); return r.json(); }
-async function dbDel(p){ const r=await fetch(dbUrl(p),{method:"DELETE"}); if(!r.ok) throw new Error(r.status); }
+function tfetch(u,o){ o=o||{}; let t; const ctl=(typeof AbortController!=="undefined")?new AbortController():null; if(ctl){ o.signal=ctl.signal; t=setTimeout(()=>ctl.abort(),15000); } return fetch(u,o).finally(()=>clearTimeout(t)); }
+async function dbGet(p){ const r=await tfetch(dbUrl(p),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function dbPut(p,v){ const r=await tfetch(dbUrl(p),{method:"PUT",body:JSON.stringify(v)}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function dbDel(p){ const r=await tfetch(dbUrl(p),{method:"DELETE"}); if(!r.ok) throw new Error(r.status); }
 
 // Quién elige por esta persona (solo si esa otra persona elige por sí misma)
 function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf(x.name)===keyOf(p.by)); return (t && !t.by && keyOf(t.name)!==keyOf(p.name)) ? t.name : ""; }
