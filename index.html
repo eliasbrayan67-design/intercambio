@@ -146,7 +146,8 @@
   textarea.wedit{min-height:90px;font-size:15px}
   .wrap.wide{max-width:720px}
   @media (min-width:760px){ .wrap.wide ul.people li{padding:14px 6px} }
-  .namechip.taken{opacity:.45;cursor:not-allowed}
+  .namechip.taken{opacity:.55}
+  input.pin{display:block;width:150px;margin:10px auto 0;text-align:center;font-size:28px;letter-spacing:.4em;font-weight:800;padding:10px}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
 </style>
@@ -210,6 +211,9 @@ async function dbDel(p){ const r=await tfetch(dbUrl(p),{method:"DELETE"}); if(!r
 
 // Quién elige por esta persona (solo si esa otra persona elige por sí misma)
 function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf(x.name)===keyOf(p.by)); return (t && !t.by && keyOf(t.name)!==keyOf(p.name)) ? t.name : ""; }
+// PIN: se guarda solo una huella (no el número) para poder entrar desde otro celular
+function pinHash(ev,k,pin){ let h=0x811c9dc5; const str=`${ev}|${k}|${pin}|${KEY}`; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(16); }
+const pinOk = v => /^\d{4}$/.test(v);
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
 // ================== Organizador ==================
@@ -394,7 +398,7 @@ function paintStatus(){
   let cl=0,wi=0,sp=0,selfN=0;
   S.people.forEach((p,i)=>{
     const k=keyOf(p.name), by=effBy(p,S.people), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; if(!by){ cl+=c; selfN++; } wi+=w; sp+=s;
-    const el=$("#st-"+i); if(el && FREEING!==k) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
+    const el=$("#st-"+i); if(el && FREEING!==k) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró${LIVE.claims[k]&&LIVE.claims[k].pin?" · 🔑 PIN":""}</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
     if(!EDITW[i]) paintWish(i);
   });
   const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${selfN} ya entraron · ${wi} de ${S.people.length} regalos puestos`;
@@ -440,26 +444,51 @@ async function renderJoin(ev){ $("#app").classList.remove("wide");
 
 function renderChoose(ev,d){
   const c=d.config, claims=d.claims||{};
-  shell(head(c,"¿Quién eres? 👀","Elige tu nombre. Ojo: ya no lo vas a poder cambiar.")+`
+  shell(head(c,"¿Quién eres? 👀","Elige tu nombre. Si ya habías entrado antes, toca tu nombre y escribe tu PIN.")+`
     <div class="card" style="margin-top:18px">
       <div class="namechips">${c.people.map((p,i)=>{ if(effBy(p,c.people)) return ""; const t=!!claims[keyOf(p.name)]; const deps=c.people.filter(x=>effBy(x,c.people)===p.name).map(x=>x.name);
-        return `<button class="namechip ${t?"taken":""}" data-n="${i}" ${t?"disabled":""}>${t?"🔒 ":""}${esc(p.name)}${deps.length?`<small style="display:block;font-weight:700;font-size:11px;opacity:.75">+ ${deps.map(esc).join(", ")}</small>`:""}</button>`; }).join("")}</div>
-      <p class="hint" style="text-align:center">Los nombres con 🔒 ya los eligió alguien.</p>
+        return `<button class="namechip ${t?"taken":""}" data-n="${i}">${t?"🔒 ":""}${esc(p.name)}${deps.length?`<small style="display:block;font-weight:700;font-size:11px;opacity:.75">+ ${deps.map(esc).join(", ")}</small>`:""}</button>`; }).join("")}</div>
+      <p class="hint" style="text-align:center">🔒 = ya entró. Si eres tú, tócalo y escribe tu PIN.</p>
       <div id="cbox"></div>
     </div>`);
+  const pinInput = id => `<input id="${id}" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">`;
   $$("[data-n]").forEach(b=>b.onclick=()=>{
-    const p=c.people[+b.dataset.n]; $$(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
-    $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Una vez que elijas, en este celular ya no podrás cambiarlo.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
-    $("#cno").onclick=()=>{ $("#cbox").innerHTML=""; b.classList.remove("on"); };
-    $("#cyes").onclick=async()=>{
-      const k=keyOf(p.name), y=$("#cyes"); y.disabled=true; y.textContent="Un momento…";
-      try{
-        const cur=await dbGet(`${ev}/claims/${k}`);
-        if(cur && cur.dev!==DEV){ $("#cerr").textContent=`Alguien ya eligió ese nombre. Si de verdad eres tú, pídele a ${c.org} que lo libere.`; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; return; }
-        await dbPut(`${ev}/claims/${k}`,{name:p.name,dev:DEV,t:Date.now()});
-        lsSet("me-"+ev,k); renderJoin(ev);
-      }catch(e){ $("#cerr").textContent="No se pudo guardar. Revisa tu internet."; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; }
-    };
+    const p=c.people[+b.dataset.n], k=keyOf(p.name), cl=claims[k];
+    $$(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+    const close=()=>{ $("#cbox").innerHTML=""; b.classList.remove("on"); };
+    if(cl){
+      // Nombre ya elegido: entrar con PIN
+      $("#cbox").innerHTML = cl.pin
+        ? `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Eres ${esc(p.name)}?</b><br>Escribe tu PIN de 4 números para entrar.
+            ${pinInput("pin1")}
+            <div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">Cancelar</button><button class="btn red small" id="cyes">Entrar</button></div><div class="err" id="cerr"></div>
+            <p class="hint">¿No te acuerdas de tu PIN? Pídele a ${esc(c.org)} que te libere.</p></div>`
+        : `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>${esc(p.name)} ya entró antes.</b><br>Si eres tú y no te reconoce, pídele a ${esc(c.org)} que te libere y vuelve a elegir tu nombre.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">Entendido</button></div></div>`;
+      $("#cno").onclick=close;
+      const y=$("#cyes"); if(y){ const inp=$("#pin1"); inp.focus();
+        const go=async()=>{ const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Son 4 números."; return; }
+          if(pinHash(ev,k,v)!==cl.pin){ $("#cerr").textContent="PIN incorrecto."; inp.value=""; return; }
+          y.disabled=true; y.textContent="Entrando…";
+          try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},cl,{dev:DEV,t2:Date.now()})); lsSet("me-"+ev,k); renderJoin(ev); }
+          catch(e){ $("#cerr").textContent="No se pudo entrar. Revisa tu internet."; y.disabled=false; y.textContent="Entrar"; } };
+        y.onclick=go; inp.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); }); }
+    } else {
+      // Nombre libre: confirmar y crear PIN
+      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Crea un <b>PIN de 4 números</b>. Te sirve para volver a entrar si cambias de celular o de navegador.
+        ${pinInput("pin1")}
+        <div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
+      $("#cno").onclick=close; const inp=$("#pin1"), y=$("#cyes");
+      y.onclick=async()=>{
+        const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Escribe un PIN de 4 números."; return; }
+        y.disabled=true; y.textContent="Un momento…";
+        try{
+          const cur=await dbGet(`${ev}/claims/${k}`);
+          if(cur && cur.dev!==DEV){ $("#cerr").textContent=`Alguien acaba de elegir ese nombre. Si de verdad eres tú, pídele a ${c.org} que lo libere.`; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; return; }
+          await dbPut(`${ev}/claims/${k}`,{name:p.name,dev:DEV,pin:pinHash(ev,k,v),t:Date.now()});
+          lsSet("me-"+ev,k); lsSet("newpin-"+ev,v); renderJoin(ev);
+        }catch(e){ $("#cerr").textContent="No se pudo guardar. Revisa tu internet."; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; }
+      };
+    }
     $("#cbox").scrollIntoView({block:"center",behavior:"smooth"});
   });
 }
@@ -485,6 +514,22 @@ function renderMe(ev,k,d){
       <div class="rsec"><h3>🎰 ${p.self?"Tu ruleta":`Ruleta de ${esc(p.name)}`}</h3><div id="rb-${i}"></div></div>
     </div>`; }).join("")+
     `<p class="foot">Entraste como ${esc(me)}. Si no eres tú, pídele a ${esc(c.org)} que te libere.</p>`);
+  // Aviso del PIN
+  const myClaim=(d.claims||{})[k]||{}, newPin=lsGet("newpin-"+ev);
+  const pinCard=document.createElement("div"); pinCard.className="card"; pinCard.style.marginTop="18px";
+  if(!myClaim.pin){
+    pinCard.innerHTML=`<h2>🔑 Crea tu PIN</h2><p style="margin:0 0 8px">Para que puedas volver a entrar si cambias de celular o de navegador.</p>
+      <input id="npin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+      <button class="btn red block" id="npin-ok" style="margin-top:8px">Guardar PIN</button><div class="err" id="npin-err"></div>`;
+  } else if(newPin){
+    pinCard.innerHTML=`<h2>🔑 Tu PIN es <span style="letter-spacing:.2em;color:var(--red)">${esc(newPin)}</span></h2><p style="margin:0">Guárdalo o tómale captura. Si algún día no te reconoce, toca tu nombre y escríbelo.</p><button class="linkbtn" id="npin-hide">Ya lo guardé</button>`;
+  } else pinCard.style.display="none";
+  const firstCard=$("#pc-0"); firstCard.parentNode.insertBefore(pinCard, firstCard);
+  const nh=$("#npin-hide"); if(nh) nh.onclick=()=>{ lsDel("newpin-"+ev); pinCard.style.display="none"; };
+  const nok=$("#npin-ok"); if(nok) nok.onclick=async()=>{ const v=$("#npin").value.trim(); if(!pinOk(v)){ $("#npin-err").textContent="Son 4 números."; return; }
+    nok.disabled=true; nok.textContent="Guardando…";
+    try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},myClaim,{name:me,dev:DEV,pin:pinHash(ev,k,v)})); lsSet("newpin-"+ev,v); renderJoin(ev); }
+    catch(e){ $("#npin-err").textContent="No se pudo guardar. Revisa tu internet."; nok.disabled=false; nok.textContent="Guardar PIN"; } };
 
   list.forEach((p,i)=>{
     const pk=keyOf(p.name);
@@ -494,7 +539,7 @@ function renderMe(ev,k,d){
       const w=$("#w-"+i).value.trim(), b=e.currentTarget; if(!w){ $("#werr-"+i).textContent="Escribe qué regalo quiere."; return; }
       b.disabled=true; const lbl=b.textContent; b.textContent="Guardando…";
       try{ await dbPut(`${ev}/wishes/${pk}`,{name:p.name,wish:w.slice(0,800),t:Date.now()}); $("#wtxt-"+i).innerHTML=linkify(w); $("#wform-"+i).style.display="none"; $("#wview-"+i).style.display=""; $("#werr-"+i).textContent="";
-        if(!hadWish){ hadWish=true; confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); } }
+        if(!hadWish){ hadWish=true; confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); else $("#rb-"+i).innerHTML=`<p style="margin:0">✅ Regalo guardado. ⏳ Todavía no se activan las ruletas. Cuando ${esc(c.org)} las active, aquí aparece.</p>`; } }
       catch(err){ $("#werr-"+i).textContent="No se pudo guardar. Revisa tu internet."; }
       b.disabled=false; b.textContent=lbl;
     };
