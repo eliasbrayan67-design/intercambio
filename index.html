@@ -219,14 +219,14 @@ let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 // ================== Organizador ==================
 let S = JSON.parse(lsGet(STORE)||lsGet("intercambio-v1")||"null") || {};
 S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false}, S);
-S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||""}));
+S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||"", nopin:!!p.nopin}));
 if(!S.ev) S.ev=rand();
 function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil})); }
 save();
 let LIVE={claims:{},wishes:{},spun:{},draw:null}, NET=true;
 const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
 const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
-const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people)}))});
+const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin}))});
 let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
@@ -303,6 +303,7 @@ function renderOrg(){
         <li><span class="av" style="background:${colorFor(p.name)}">${esc(initials(p.name))}</span>
         <div class="grow"><div class="pname">${esc(p.name)}</div>
           <div class="sts" id="st-${i}"></div>
+          ${effBy(p,S.people)?"":`<label class="bylbl"><input type="checkbox" data-nopin="${i}" ${p.nopin?"checked":""} style="width:auto;margin:0"> Entrar sin PIN</label>`}
           <label class="bylbl">📱 Quién elige por ${esc(p.name.split(" ")[0])}:
             <select class="by" data-by="${i}">
               <option value="">Él/ella mismo(a)</option>
@@ -364,6 +365,7 @@ function renderOrg(){
   $("#p-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#p-phone").focus(); }});
   $("#p-phone").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); }});
   $$("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); pushCfg(true); renderOrg(); });
+  $$("[data-nopin]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.nopin].nopin=cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-by]").forEach(sel=>sel.addEventListener("change",()=>{ const p=S.people[+sel.dataset.by];
     p.by=sel.value;
     if(p.by) S.people.forEach(x=>{ if(keyOf(x.by||"")===keyOf(p.name)) x.by=""; });   // quien depende de otro no puede tener dependientes
@@ -398,7 +400,7 @@ function paintStatus(){
   let cl=0,wi=0,sp=0,selfN=0;
   S.people.forEach((p,i)=>{
     const k=keyOf(p.name), by=effBy(p,S.people), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; if(!by){ cl+=c; selfN++; } wi+=w; sp+=s;
-    const el=$("#st-"+i); if(el && FREEING!==k) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró${LIVE.claims[k]&&LIVE.claims[k].pin?" · 🔑 PIN":""}</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
+    const el=$("#st-"+i); if(el && FREEING!==k) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>${p.nopin?`<span class="st on">🔓 Entra sin PIN</span>`:LIVE.claims[k]&&LIVE.claims[k].pin?`<span class="st on">🔑 PIN: ${esc(LIVE.claims[k].pv||"—")}</span>`:`<span class="st">🔑 Sin PIN</span>`}`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
     if(!EDITW[i]) paintWish(i);
   });
   const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${selfN} ya entraron · ${wi} de ${S.people.length} regalos puestos`;
@@ -421,7 +423,7 @@ async function startDraw(){
 
 async function openAdmin(ev){
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><p>Abriendo tu intercambio…</p></div>`;
-  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||""}))}); save(); } }catch(e){}
+  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||"",nopin:!!p.nopin}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
 async function startOrg(){ $("#app").classList.add("wide"); if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
@@ -458,7 +460,14 @@ function renderChoose(ev,d){
     const p=c.people[+b.dataset.n], k=keyOf(p.name), cl=claims[k];
     $$(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
     const close=()=>{ $("#cbox").innerHTML=""; b.classList.remove("on"); };
-    if(cl){
+    if(p.nopin){
+      // Esta persona entra sin PIN (lo decidió el organizador)
+      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
+      $("#cno").onclick=close; const y=$("#cyes");
+      y.onclick=async()=>{ y.disabled=true; y.textContent="Un momento…";
+        try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},cl||{},{name:p.name,dev:DEV,t:Date.now()})); lsSet("me-"+ev,k); renderJoin(ev); }
+        catch(e){ $("#cerr").textContent="No se pudo guardar. Revisa tu internet."; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; } };
+    } else if(cl){
       // Nombre ya elegido: entrar con PIN
       $("#cbox").innerHTML = cl.pin
         ? `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Eres ${esc(p.name)}?</b><br>Escribe tu PIN de 3 números para entrar.
@@ -476,7 +485,7 @@ function renderChoose(ev,d){
         y.onclick=go; inp.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); }); }
     } else {
       // Nombre libre: confirmar y crear PIN
-      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Crea un <b>PIN de 3 números</b>. Te sirve para volver a entrar si cambias de celular o de navegador.
+      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Crea un <b>PIN de 3 números</b> para volver a entrar si cambias de celular o de navegador.<br><b>Tip:</b> usa los <b>últimos 3 números de tu celular</b> para no olvidarlo.
         ${pinInput("pin1")}
         <div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
       $("#cno").onclick=close; const inp=$("#pin1"), y=$("#cyes");
@@ -486,7 +495,7 @@ function renderChoose(ev,d){
         try{
           const cur=await dbGet(`${ev}/claims/${k}`);
           if(cur && cur.dev!==DEV){ $("#cerr").textContent=`Alguien acaba de elegir ese nombre. Si de verdad eres tú, pídele a ${c.org} que lo libere.`; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; return; }
-          await dbPut(`${ev}/claims/${k}`,{name:p.name,dev:DEV,pin:pinHash(ev,k,v),t:Date.now()});
+          await dbPut(`${ev}/claims/${k}`,{name:p.name,dev:DEV,pin:pinHash(ev,k,v),pv:v,t:Date.now()});
           lsSet("me-"+ev,k); lsSet("newpin-"+ev,v); renderJoin(ev);
         }catch(e){ $("#cerr").textContent="No se pudo guardar. Revisa tu internet."; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; }
       };
@@ -519,18 +528,21 @@ function renderMe(ev,k,d){
   // Aviso del PIN
   const myClaim=(d.claims||{})[k]||{}, newPin=lsGet("newpin-"+ev);
   const pinCard=document.createElement("div"); pinCard.className="card"; pinCard.style.marginTop="18px";
-  if(!myClaim.pin){
-    pinCard.innerHTML=`<h2>🔑 Crea tu PIN</h2><p style="margin:0 0 8px">Para que puedas volver a entrar si cambias de celular o de navegador.</p>
+  if(meP && meP.nopin){ pinCard.style.display="none"; }
+  else if(!myClaim.pin){
+    pinCard.innerHTML=`<h2>🔑 Crea tu PIN</h2><p style="margin:0 0 8px">Para que puedas volver a entrar si cambias de celular o de navegador. <b>Tip:</b> usa los últimos 3 números de tu celular.</p>
       <input id="npin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="•••">
       <button class="btn red block" id="npin-ok" style="margin-top:8px">Guardar PIN</button><div class="err" id="npin-err"></div>`;
   } else if(newPin){
-    pinCard.innerHTML=`<h2>🔑 Tu PIN es <span style="letter-spacing:.2em;color:var(--red)">${esc(newPin)}</span></h2><p style="margin:0">Guárdalo o tómale captura. Si algún día no te reconoce, toca tu nombre y escríbelo.</p><button class="linkbtn" id="npin-hide">Ya lo guardé</button>`;
+    pinCard.innerHTML=`<h2>🔑 Tu PIN es <span style="letter-spacing:.2em;color:var(--red)">${esc(newPin)}</span></h2><p style="margin:0 0 10px">Guárdalo. Si algún día no te reconoce, toca tu nombre y escríbelo.</p>
+      <a class="btn wa block" style="padding:12px" target="_blank" rel="noopener" href="${waLink("", `🔑 Mi PIN del ${c.title} es ${newPin}\n(Para entrar: toca mi nombre y escribe el PIN)\n${location.href}`)}">📲 Mandármelo por WhatsApp</a>
+      <button class="linkbtn" id="npin-hide">Ya lo guardé</button>`;
   } else pinCard.style.display="none";
   const firstCard=$("#pc-0"); firstCard.parentNode.insertBefore(pinCard, firstCard);
   const nh=$("#npin-hide"); if(nh) nh.onclick=()=>{ lsDel("newpin-"+ev); pinCard.style.display="none"; };
   const nok=$("#npin-ok"); if(nok) nok.onclick=async()=>{ const v=$("#npin").value.trim(); if(!pinOk(v)){ $("#npin-err").textContent="Son 3 números."; return; }
     nok.disabled=true; nok.textContent="Guardando…";
-    try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},myClaim,{name:me,dev:DEV,pin:pinHash(ev,k,v)})); lsSet("newpin-"+ev,v); renderJoin(ev); }
+    try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},myClaim,{name:me,dev:DEV,pin:pinHash(ev,k,v),pv:v})); lsSet("newpin-"+ev,v); renderJoin(ev); }
     catch(e){ $("#npin-err").textContent="No se pudo guardar. Revisa tu internet."; nok.disabled=false; nok.textContent="Guardar PIN"; } };
 
   list.forEach((p,i)=>{
