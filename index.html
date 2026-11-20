@@ -133,6 +133,10 @@
   .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 8px;background:#efe6d6;color:var(--muted);border:0;font-family:inherit}
   .st.on{background:#dff3e6;color:var(--ok)}
   .st.free{background:#fde3e5;color:var(--red);cursor:pointer}
+  .bylbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);margin:6px 0 0}
+  .by{font:inherit;font-size:13px;font-weight:700;padding:5px 8px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);max-width:60%}
+  .rsec{margin-top:16px;padding-top:14px;border-top:2px dashed var(--line)}
+  .rsec h3{font-family:"Baloo 2";font-size:19px;margin:0 0 8px}
   .namechip.taken{opacity:.45;cursor:not-allowed}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
@@ -180,29 +184,38 @@ async function dbGet(p){ const r=await fetch(dbUrl(p),{cache:"no-store"}); if(!r
 async function dbPut(p,v){ const r=await fetch(dbUrl(p),{method:"PUT",body:JSON.stringify(v)}); if(!r.ok) throw new Error(r.status); return r.json(); }
 async function dbDel(p){ const r=await fetch(dbUrl(p),{method:"DELETE"}); if(!r.ok) throw new Error(r.status); }
 
+// Quién elige por esta persona (solo si esa otra persona elige por sí misma)
+function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf(x.name)===keyOf(p.by)); return (t && !t.by && keyOf(t.name)!==keyOf(p.name)) ? t.name : ""; }
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
 // ================== Organizador ==================
 let S = JSON.parse(lsGet(STORE)||lsGet("intercambio-v1")||"null") || {};
 S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false}, S);
-S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||""}));
+S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||""}));
 if(!S.ev) S.ev=rand();
 function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil})); }
 save();
 let LIVE={claims:{},wishes:{},spun:{},draw:null}, NET=true;
 const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
 const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
-const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||""}))});
+const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people)}))});
 let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
 function drawList(){ if(!LIVE.draw) return []; return Object.values(LIVE.draw).map(decode).filter(Boolean).map(([g,r])=>({g,r})); }
 let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,300),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
 
-function doDraw(names){
-  const a=[...names];
-  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a.map((g,i)=>({g, r:a[(i+1)%a.length]}));   // un solo ciclo: nadie se repite ni se toca a sí mismo
+function doDraw(names, people){
+  const resp={}; (people||[]).forEach(p=>{ const b=effBy(p,people); if(b) resp[p.name]=b; });
+  let best=null;
+  for(let t=0;t<5000;t++){
+    const a=[...names];
+    for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+    const d=a.map((g,i)=>({g, r:a[(i+1)%a.length]}));   // un solo ciclo: nadie se repite ni se toca a sí mismo
+    if(!best) best=d;
+    if(d.every(x=>resp[x.g]!==x.r)) return d;          // a un niño no le toca su papá/mamá (quien elige por él)
+  }
+  return best;
 }
 
 function renderOrg(){
@@ -237,6 +250,11 @@ function renderOrg(){
         <li><span class="av" style="background:${colorFor(p.name)}">${esc(initials(p.name))}</span>
         <div class="grow"><div class="pname">${esc(p.name)}</div>
           <div class="sts" id="st-${i}"></div>
+          <label class="bylbl">📱 Quién elige por ${esc(p.name.split(" ")[0])}:
+            <select class="by" data-by="${i}">
+              <option value="">Él/ella mismo(a)</option>
+              ${S.people.filter(o=>o!==p && !effBy(o,S.people) && !S.people.some(x=>x!==o && effBy(x,S.people)===p.name && false)).map(o=>`<option value="${esc(o.name)}" ${effBy(p,S.people)===o.name?"selected":""}>${esc(o.name)}</option>`).join("")}
+            </select></label>
           <input class="wish" data-wish="${i}" value="${esc(wishOf(p.name))}" placeholder="🎁 Regalo que quiere" maxlength="300"></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
@@ -293,6 +311,10 @@ function renderOrg(){
   $("#p-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#p-phone").focus(); }});
   $("#p-phone").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); }});
   $$("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); pushCfg(true); renderOrg(); });
+  $$("[data-by]").forEach(sel=>sel.addEventListener("change",()=>{ const p=S.people[+sel.dataset.by];
+    p.by=sel.value;
+    if(p.by) S.people.forEach(x=>{ if(keyOf(x.by||"")===keyOf(p.name)) x.by=""; });   // quien depende de otro no puede tener dependientes
+    pushCfg(true); renderOrg(); }));
   $$("[data-wish]").forEach(inp=>inp.addEventListener("input",()=>pushWish(S.people[+inp.dataset.wish].name, inp.value)));
 
   // link
@@ -320,13 +342,13 @@ function refreshLinks(){
 }
 function paintStatus(){
   const net=$("#net"); if(net) net.textContent = NET ? "" : "⚠️ Sin conexión a la base de datos. Revisa tu internet.";
-  let cl=0,wi=0,sp=0;
+  let cl=0,wi=0,sp=0,selfN=0;
   S.people.forEach((p,i)=>{
-    const k=keyOf(p.name), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; cl+=c; wi+=w; sp+=s;
-    const el=$("#st-"+i); if(el) el.innerHTML = `${c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
+    const k=keyOf(p.name), by=effBy(p,S.people), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; if(!by){ cl+=c; selfN++; } wi+=w; sp+=s;
+    const el=$("#st-"+i); if(el) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
     const inp=$(`[data-wish="${i}"]`); if(inp && inp!==document.activeElement && !wishT[p.name+"_typing"]) inp.value=wishOf(p.name);
   });
-  const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${S.people.length} ya entraron · ${wi} ya pusieron su regalo`;
+  const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${selfN} ya entraron · ${wi} de ${S.people.length} regalos puestos`;
   const sc=$("#spuncount"); if(sc) sc.textContent=`✅ Ruletas activadas · ${sp} de ${drawList().length} ya giraron`;
 }
 async function refreshOrg(){ try{ await pull(); NET=true; }catch(e){ NET=false; } paintStatus(); }
@@ -335,7 +357,7 @@ async function startDraw(){
   const names=S.people.map(p=>p.name);
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><div class="drum" id="drum"></div><p>Revolviendo papelitos…</p></div>`;
   const iv=setInterval(()=>{ $("#drum").textContent=names[Math.floor(Math.random()*names.length)]; },90);
-  const d=doDraw(names), map={}; d.forEach(x=>map[keyOf(x.g)]=encode([x.g,x.r]));
+  const d=doDraw(names,S.people), map={}; d.forEach(x=>map[keyOf(x.g)]=encode([x.g,x.r]));
   let ok=true;
   await Promise.all([ pushCfg(true), dbPut(`${S.ev}/draw`,map), dbDel(`${S.ev}/spun`), new Promise(r=>setTimeout(r,1900)) ]).catch(()=>{ ok=false; });
   clearInterval(iv);
@@ -346,7 +368,7 @@ async function startDraw(){
 
 async function openAdmin(ev){
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><p>Abriendo tu intercambio…</p></div>`;
-  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||""}))}); save(); } }catch(e){}
+  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||""}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
 async function startOrg(){ if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
@@ -371,7 +393,8 @@ function renderChoose(ev,d){
   const c=d.config, claims=d.claims||{};
   shell(head(c,"¿Quién eres? 👀","Elige tu nombre. Ojo: ya no lo vas a poder cambiar.")+`
     <div class="card" style="margin-top:18px">
-      <div class="namechips">${c.people.map((p,i)=>{ const t=!!claims[keyOf(p.name)]; return `<button class="namechip ${t?"taken":""}" data-n="${i}" ${t?"disabled":""}>${t?"🔒 ":""}${esc(p.name)}</button>`; }).join("")}</div>
+      <div class="namechips">${c.people.map((p,i)=>{ if(effBy(p,c.people)) return ""; const t=!!claims[keyOf(p.name)]; const deps=c.people.filter(x=>effBy(x,c.people)===p.name).map(x=>x.name);
+        return `<button class="namechip ${t?"taken":""}" data-n="${i}" ${t?"disabled":""}>${t?"🔒 ":""}${esc(p.name)}${deps.length?`<small style="display:block;font-weight:700;font-size:11px;opacity:.75">+ ${deps.map(esc).join(", ")}</small>`:""}</button>`; }).join("")}</div>
       <p class="hint" style="text-align:center">Los nombres con 🔒 ya los eligió alguien.</p>
       <div id="cbox"></div>
     </div>`);
@@ -393,60 +416,67 @@ function renderChoose(ev,d){
 }
 
 function renderMe(ev,k,d){
-  const c=d.config, me=(c.people.find(p=>keyOf(p.name)===k)||(d.claims[k]||{})).name||"tú";
-  const myWish=((d.wishes||{})[k]||{}).wish||"";
-  const dr=d.draw||null, myDraw=dr&&dr[k]?decode(dr[k]):null, spun=!!(d.spun||{})[k];
-  shell(head(c,`¡Hola, ${esc(me)}! 👋`,"")+`
-    <div class="card" style="margin-top:18px" id="wcard">
-      <h2>🎁 Tu regalo</h2>
-      <div id="wview" style="${myWish?"":"display:none"}"><div class="giftwish" style="margin-top:0"><b>Pediste</b><div id="wtxt">${esc(myWish)}</div></div><button class="linkbtn" id="wedit">Cambiar mi regalo</button></div>
-      <div id="wform" style="${myWish?"display:none":""}">
-        <textarea id="w" maxlength="300" placeholder="Ej. Una sudadera talla M color negro, o unos audífonos">${esc(myWish)}</textarea>
-        <p class="hint">${c.budget?`Pide algo de hasta <b>${esc(c.budget)}</b>. `:""}Puedes poner varias opciones, talla, color o tienda.</p>
-        <button class="btn red block" id="wsave" style="margin-top:8px">Guardar mi regalo</button>
-        <div class="err" id="werr"></div>
+  const c=d.config, people=c.people||[];
+  const meP=people.find(p=>keyOf(p.name)===k), me=meP?meP.name:((d.claims||{})[k]||{}).name||"tú";
+  const deps=people.filter(p=>effBy(p,people)===me);
+  const list=[{name:me,self:true}, ...deps.map(p=>({name:p.name,self:false}))];
+  const dr=d.draw||null;
+  shell(head(c,`¡Hola, ${esc(me)}! 👋`, deps.length?`También eliges por: ${deps.map(p=>esc(p.name)).join(", ")}`:"")+
+    list.map((p,i)=>{ const w=((d.wishes||{})[keyOf(p.name)]||{}).wish||""; return `
+    <div class="card" style="margin-top:${i?0:18}px" id="pc-${i}">
+      <h2>${p.self?"🎁 Tu regalo":`🧒 ${esc(p.name)}`}</h2>
+      ${p.self?"":`<p class="hint" style="margin-top:-6px">Tú eliges por ${esc(p.name)}: escribe su regalo y gira su ruleta.</p>`}
+      <div id="wview-${i}" style="${w?"":"display:none"}"><div class="giftwish" style="margin-top:0"><b>${p.self?"Pediste":"Pidió"}</b><div id="wtxt-${i}">${esc(w)}</div></div><button class="linkbtn" data-wedit="${i}">Cambiar regalo</button></div>
+      <div id="wform-${i}" style="${w?"display:none":""}">
+        <textarea id="w-${i}" maxlength="300" placeholder="${p.self?"Ej. Una sudadera talla M color negro, o unos audífonos":`¿Qué regalo quiere ${esc(p.name)}?`}">${esc(w)}</textarea>
+        <p class="hint">${c.budget?`Hasta <b>${esc(c.budget)}</b>. `:""}Pueden ser varias opciones, talla, color o tienda.</p>
+        <button class="btn red block" data-wsave="${i}" style="margin-top:8px">Guardar ${p.self?"mi":"su"} regalo</button>
+        <div class="err" id="werr-${i}"></div>
       </div>
-    </div>
-    <div class="card" id="rcard">
-      <h2>🎰 Tu ruleta</h2>
-      <div id="rbody"></div>
-    </div>
-    <p class="foot">Entraste como ${esc(me)}. Si no eres tú, pídele a ${esc(c.org)} que te libere.</p>`);
-  $("#wedit").onclick=()=>{ $("#wview").style.display="none"; $("#wform").style.display=""; $("#w").focus(); };
-  $("#wsave").onclick=async()=>{
-    const w=$("#w").value.trim(), b=$("#wsave"); if(!w){ $("#werr").textContent="Escribe qué regalo quieres."; return; }
-    b.disabled=true; b.textContent="Guardando…";
-    try{ await dbPut(`${ev}/wishes/${k}`,{name:me,wish:w.slice(0,300),t:Date.now()}); $("#wtxt").textContent=w; $("#wform").style.display="none"; $("#wview").style.display=""; $("#werr").textContent=""; if(!myWish){ confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); } }
-    catch(e){ $("#werr").textContent="No se pudo guardar. Revisa tu internet."; }
-    b.disabled=false; b.textContent="Guardar mi regalo";
-  };
-  const rb=$("#rbody");
+      <div class="rsec"><h3>🎰 ${p.self?"Tu ruleta":`Ruleta de ${esc(p.name)}`}</h3><div id="rb-${i}"></div></div>
+    </div>`; }).join("")+
+    `<p class="foot">Entraste como ${esc(me)}. Si no eres tú, pídele a ${esc(c.org)} que te libere.</p>`);
+
+  list.forEach((p,i)=>{
+    const pk=keyOf(p.name);
+    let hadWish=!!(((d.wishes||{})[pk]||{}).wish);
+    $(`[data-wedit="${i}"]`).onclick=()=>{ $("#wview-"+i).style.display="none"; $("#wform-"+i).style.display=""; $("#w-"+i).focus(); };
+    $(`[data-wsave="${i}"]`).onclick=async e=>{
+      const w=$("#w-"+i).value.trim(), b=e.currentTarget; if(!w){ $("#werr-"+i).textContent="Escribe qué regalo quiere."; return; }
+      b.disabled=true; const lbl=b.textContent; b.textContent="Guardando…";
+      try{ await dbPut(`${ev}/wishes/${pk}`,{name:p.name,wish:w.slice(0,300),t:Date.now()}); $("#wtxt-"+i).textContent=w; $("#wform-"+i).style.display="none"; $("#wview-"+i).style.display=""; $("#werr-"+i).textContent="";
+        if(!hadWish){ hadWish=true; confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); } }
+      catch(err){ $("#werr-"+i).textContent="No se pudo guardar. Revisa tu internet."; }
+      b.disabled=false; b.textContent=lbl;
+    };
+    const rb=$("#rb-"+i);
+    if(!dr){ rb.innerHTML=`<p style="margin:0">${hadWish?"✅ Regalo guardado. ":"👆 Primero guarda el regalo. "}⏳ Todavía no se activan las ruletas. Cuando ${esc(c.org)} las active, aquí aparece.</p>`; return; }
+    const pd=dr[pk]?decode(dr[pk]):null;
+    if(!pd){ rb.innerHTML=`<p style="margin:0">${p.self?"No estás":"No está"} en las ruletas. Avísale a ${esc(c.org)}.</p>`; return; }
+    if(!hadWish){ rb.innerHTML=`<p style="margin:0">👆 Primero guarda el regalo. Luego aquí aparece la ruleta.</p>`; return; }
+    const r=pd[1];
+    const result=()=>`
+      <div class="lbl" style="text-align:center">${p.self?"Te tocó darle regalo a":`A ${esc(p.name)} le tocó darle regalo a`}</div>
+      <div class="who" style="text-align:center">${esc(r)}</div>
+      <div class="giftwish"><b>🎁 Lo que quiere</b><div>${esc(((d.wishes||{})[keyOf(r)]||{}).wish||"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉")}</div></div>
+      <p class="secret" style="text-align:center">🤫 Es secreto, no le digas a nadie.</p>
+      ${c.orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(c.orgPhone, `✅ Ya giré la ruleta${p.self?"":` de ${p.name}`} del ${c.title} — ${me}`)}">Avisarle a ${esc(c.org)}</a>`:""}`;
+    if((d.spun||{})[pk]){ rb.innerHTML=result(); return; }
+    const names=people.map(x=>x.name).filter(n=>n!==p.name); if(!names.includes(r)) names.push(r);
+    rb.innerHTML=`<div class="wheelwrap"><div class="pointer"></div><canvas id="wheel-${i}"></canvas><div class="hub">🎁</div></div>
+      <button class="btn red block" id="spin-${i}" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>`;
+    mountWheel($("#wheel-"+i), $("#spin-"+i), names, r, async()=>{ try{ await dbPut(`${ev}/spun/${pk}`,Date.now()); }catch(e){}
+      confetti(); rb.innerHTML=`<div class="reveal show">${result()}</div>`; $("#pc-"+i).scrollIntoView({block:"start",behavior:"smooth"}); });
+  });
   if(!dr){
-    rb.innerHTML=`<p style="margin:0">${myWish?"✅ Ya guardaste tu regalo. ":"👆 Primero guarda qué regalo quieres. "}⏳ Todavía no se activan las ruletas. Cuando ${esc(c.org)} las active, aquí te va a salir la tuya.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
-    PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
-    return;
+    PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); return; } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
   }
-  if(myDraw && !myWish){ rb.innerHTML=`<p style="margin:0">👆 Primero guarda qué regalo quieres. Luego aquí te aparece tu ruleta.</p>`; return; }
-  if(!myDraw){ rb.innerHTML=`<p style="margin:0">No estás en las ruletas. Avísale a ${esc(c.org)} para que lo repita.</p>`; return; }
-  const r=myDraw[1];
-  const result=()=>`
-    <div class="lbl" style="text-align:center">Te tocó darle regalo a</div>
-    <div class="who" style="text-align:center">${esc(r)}</div>
-    <div class="giftwish"><b>🎁 Lo que quiere</b><div id="gw">${esc(((d.wishes||{})[keyOf(r)]||{}).wish||"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉")}</div></div>
-    <p class="secret" style="text-align:center">🤫 Es secreto, no le digas a nadie.</p>
-    ${c.orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(c.orgPhone, `✅ Ya giré la ruleta del ${c.title} — ${me}`)}">Avisarle a ${esc(c.org)} que ya me tocó</a>`:""}`;
-  if(spun){ rb.innerHTML=result(); return; }
-  const names=c.people.map(p=>p.name).filter(n=>n!==me); if(!names.includes(r)) names.push(r);
-  rb.innerHTML=`<div class="wheelwrap"><div class="pointer"></div><canvas id="wheel"></canvas><div class="hub">🎁</div></div>
-    <button class="btn red block" id="spin" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>`;
-  mountWheel(names, r, async()=>{ try{ await dbPut(`${ev}/spun/${k}`,Date.now()); }catch(e){}
-    confetti(); rb.innerHTML=`<div class="reveal show">${result()}</div>`; $("#rcard").scrollIntoView({block:"start",behavior:"smooth"}); });
 }
 
-function mountWheel(names, r, onDone){
+function mountWheel(cv, btn, names, r, onDone){
   for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
   const target=names.indexOf(r);
-  const cv=$("#wheel"), ctx=cv.getContext("2d"), dpr=Math.max(1,devicePixelRatio||1);
+  const ctx=cv.getContext("2d"), dpr=Math.max(1,devicePixelRatio||1);
   const size=Math.min(300, innerWidth-72); cv.style.width=cv.style.height=size+"px"; cv.width=cv.height=size*dpr;
   const n=names.length, seg=2*Math.PI/n, R=size*dpr/2;
   const segCols=["#c8202f","#1f8a52","#e9b44c","#fff8ec","#2f6db5","#a3141f","#14523e","#c98f22"];
@@ -468,8 +498,8 @@ function mountWheel(names, r, onDone){
   const jitter=(Math.random()-.5)*seg*.6, finalRot=-Math.PI/2-(target+.5)*seg+jitter;
   const norm=x=>((x%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
   draw(Math.random()*2*Math.PI);
-  $("#spin").onclick=()=>{
-    const btn=$("#spin"); btn.disabled=true; btn.textContent="Girando…";
+  btn.onclick=()=>{
+    btn.disabled=true; btn.textContent="Girando…";
     const start=performance.now(), dur=5200, from=Math.random()*2*Math.PI, to=from+2*Math.PI*7+norm(finalRot-from);
     let last=-1;
     (function frame(now){
