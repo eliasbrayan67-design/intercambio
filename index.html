@@ -298,13 +298,17 @@ function renderOrg(){
   // link
   const gc=$("#gl-copy"); if(gc) gc.onclick=async()=>{ try{ await navigator.clipboard.writeText(groupLink()); gc.textContent="¡Copiado!"; }catch(e){ const b=$("#gl-box"); b.style.display="block"; b.value=groupLink(); b.select(); gc.textContent="Cópialo ↓"; } };
   refreshLinks();
+  const ask=(msg,label,fn)=>{ $("#confirm-box").innerHTML=`<div class="confirm"><b>${msg}</b><div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes">${label}</button></div></div>`;
+    $("#no").onclick=()=>$("#confirm-box").innerHTML=""; $("#yes").onclick=fn; $("#confirm-box").scrollIntoView({block:"center"}); };
   // sorteo
-  const go=$("#go"); if(go) go.onclick=startDraw;
+  const go=$("#go"); if(go) go.onclick=()=>{
+    const faltan=S.people.filter(p=>!wishOf(p.name)).map(p=>p.name);
+    if(!faltan.length) return startDraw();
+    ask(`Faltan ${faltan.length} por poner su regalo: ${faltan.map(esc).join(", ")}. Hasta que lo guarden no pueden girar su ruleta. ¿Hacer el sorteo de todos modos?`,"Sí, sortear",startDraw);
+  };
   const sp=$("#spoil"); if(sp) sp.onclick=()=>{ S.spoil=true; save(); renderOrg(); };
   const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderOrg(); };
   // reiniciar
-  const ask=(msg,label,fn)=>{ $("#confirm-box").innerHTML=`<div class="confirm"><b>${msg}</b><div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes">${label}</button></div></div>`;
-    $("#no").onclick=()=>$("#confirm-box").innerHTML=""; $("#yes").onclick=fn; $("#confirm-box").scrollIntoView({block:"center"}); };
   const rd=$("#redraw"); if(rd) rd.onclick=()=>ask("¿Repetir el sorteo? A todos les puede tocar otra persona y tienen que volver a girar.","Sí, repetir",async()=>{ await dbDel(`${S.ev}/spun`).catch(()=>{}); startDraw(); });
   $("#reset").onclick=()=>ask("¿Reiniciar todo? Se borran los nombres elegidos, los regalos y el sorteo.","Sí, reiniciar",async()=>{
     try{ await Promise.all(["claims","wishes","spun","draw"].map(x=>dbDel(`${S.ev}/${x}`))); }catch(e){}
@@ -345,7 +349,7 @@ async function openAdmin(ev){
   try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||""}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
-async function startOrg(){ await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
+async function startOrg(){ if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
 
 // ================== Participante (link único) ==================
 let PIV=null;
@@ -412,16 +416,17 @@ function renderMe(ev,k,d){
   $("#wsave").onclick=async()=>{
     const w=$("#w").value.trim(), b=$("#wsave"); if(!w){ $("#werr").textContent="Escribe qué regalo quieres."; return; }
     b.disabled=true; b.textContent="Guardando…";
-    try{ await dbPut(`${ev}/wishes/${k}`,{name:me,wish:w.slice(0,300),t:Date.now()}); $("#wtxt").textContent=w; $("#wform").style.display="none"; $("#wview").style.display=""; $("#werr").textContent=""; if(!myWish) confetti(); }
+    try{ await dbPut(`${ev}/wishes/${k}`,{name:me,wish:w.slice(0,300),t:Date.now()}); $("#wtxt").textContent=w; $("#wform").style.display="none"; $("#wview").style.display=""; $("#werr").textContent=""; if(!myWish){ confetti(); if(dr) setTimeout(()=>renderJoin(ev),900); } }
     catch(e){ $("#werr").textContent="No se pudo guardar. Revisa tu internet."; }
     b.disabled=false; b.textContent="Guardar mi regalo";
   };
   const rb=$("#rbody");
   if(!dr){
-    rb.innerHTML=`<p style="margin:0">⏳ Todavía no se hace el sorteo. Cuando ${esc(c.org)} lo haga, aquí te va a salir tu ruleta.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
+    rb.innerHTML=`<p style="margin:0">${myWish?"✅ Ya guardaste tu regalo. ":"👆 Primero guarda qué regalo quieres. "}⏳ Todavía no se hace el sorteo. Cuando ${esc(c.org)} lo haga, aquí te va a salir tu ruleta.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
     PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
     return;
   }
+  if(myDraw && !myWish){ rb.innerHTML=`<p style="margin:0">👆 Primero guarda qué regalo quieres. Luego aquí te aparece tu ruleta.</p>`; return; }
   if(!myDraw){ rb.innerHTML=`<p style="margin:0">No estás en este sorteo. Avísale a ${esc(c.org)} para que lo repita.</p>`; return; }
   const r=myDraw[1];
   const result=()=>`
