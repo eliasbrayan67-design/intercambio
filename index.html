@@ -147,7 +147,7 @@
   .wrap.wide{max-width:720px}
   @media (min-width:760px){ .wrap.wide ul.people li{padding:14px 6px} }
   .namechip.taken{opacity:.55}
-  input.pin{display:block;width:150px;margin:10px auto 0;text-align:center;font-size:28px;letter-spacing:.4em;font-weight:800;padding:10px}
+  input.pin{display:block;width:130px;margin:10px auto 0;text-align:center;font-size:28px;letter-spacing:.4em;font-weight:800;padding:10px}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
 </style>
@@ -211,9 +211,9 @@ async function dbDel(p){ const r=await tfetch(dbUrl(p),{method:"DELETE"}); if(!r
 
 // Quién elige por esta persona (solo si esa otra persona elige por sí misma)
 function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf(x.name)===keyOf(p.by)); return (t && !t.by && keyOf(t.name)!==keyOf(p.name)) ? t.name : ""; }
-// PIN: se guarda solo una huella (no el número) para poder entrar desde otro celular
+// PIN de 3 números: se guarda solo una huella (no el número) para poder entrar desde otro celular
 function pinHash(ev,k,pin){ let h=0x811c9dc5; const str=`${ev}|${k}|${pin}|${KEY}`; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(16); }
-const pinOk = v => /^\d{4}$/.test(v);
+const pinOk = v => /^\d{3}$/.test(v);
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
 // ================== Organizador ==================
@@ -451,7 +451,7 @@ function renderChoose(ev,d){
       <p class="hint" style="text-align:center">🔒 = ya entró. Si eres tú, tócalo y escribe tu PIN.</p>
       <div id="cbox"></div>
     </div>`);
-  const pinInput = id => `<input id="${id}" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">`;
+  const pinInput = id => `<input id="${id}" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="•••">`;
   $$("[data-n]").forEach(b=>b.onclick=()=>{
     const p=c.people[+b.dataset.n], k=keyOf(p.name), cl=claims[k];
     $$(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
@@ -459,14 +459,14 @@ function renderChoose(ev,d){
     if(cl){
       // Nombre ya elegido: entrar con PIN
       $("#cbox").innerHTML = cl.pin
-        ? `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Eres ${esc(p.name)}?</b><br>Escribe tu PIN de 4 números para entrar.
+        ? `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Eres ${esc(p.name)}?</b><br>Escribe tu PIN de 3 números para entrar.
             ${pinInput("pin1")}
             <div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">Cancelar</button><button class="btn red small" id="cyes">Entrar</button></div><div class="err" id="cerr"></div>
             <p class="hint">¿No te acuerdas de tu PIN? Pídele a ${esc(c.org)} que te libere.</p></div>`
         : `<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>${esc(p.name)} ya entró antes.</b><br>Si eres tú y no te reconoce, pídele a ${esc(c.org)} que te libere y vuelve a elegir tu nombre.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">Entendido</button></div></div>`;
       $("#cno").onclick=close;
       const y=$("#cyes"); if(y){ const inp=$("#pin1"); inp.focus();
-        const go=async()=>{ const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Son 4 números."; return; }
+        const go=async()=>{ const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Son 3 números."; return; }
           if(pinHash(ev,k,v)!==cl.pin){ $("#cerr").textContent="PIN incorrecto."; inp.value=""; return; }
           y.disabled=true; y.textContent="Entrando…";
           try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},cl,{dev:DEV,t2:Date.now()})); lsSet("me-"+ev,k); renderJoin(ev); }
@@ -474,12 +474,12 @@ function renderChoose(ev,d){
         y.onclick=go; inp.addEventListener("keydown",e=>{ if(e.key==="Enter") go(); }); }
     } else {
       // Nombre libre: confirmar y crear PIN
-      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Crea un <b>PIN de 4 números</b>. Te sirve para volver a entrar si cambias de celular o de navegador.
+      $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Crea un <b>PIN de 3 números</b>. Te sirve para volver a entrar si cambias de celular o de navegador.
         ${pinInput("pin1")}
         <div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
       $("#cno").onclick=close; const inp=$("#pin1"), y=$("#cyes");
       y.onclick=async()=>{
-        const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Escribe un PIN de 4 números."; return; }
+        const v=inp.value.trim(); if(!pinOk(v)){ $("#cerr").textContent="Escribe un PIN de 3 números."; return; }
         y.disabled=true; y.textContent="Un momento…";
         try{
           const cur=await dbGet(`${ev}/claims/${k}`);
@@ -519,14 +519,14 @@ function renderMe(ev,k,d){
   const pinCard=document.createElement("div"); pinCard.className="card"; pinCard.style.marginTop="18px";
   if(!myClaim.pin){
     pinCard.innerHTML=`<h2>🔑 Crea tu PIN</h2><p style="margin:0 0 8px">Para que puedas volver a entrar si cambias de celular o de navegador.</p>
-      <input id="npin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="••••">
+      <input id="npin" class="pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" placeholder="•••">
       <button class="btn red block" id="npin-ok" style="margin-top:8px">Guardar PIN</button><div class="err" id="npin-err"></div>`;
   } else if(newPin){
     pinCard.innerHTML=`<h2>🔑 Tu PIN es <span style="letter-spacing:.2em;color:var(--red)">${esc(newPin)}</span></h2><p style="margin:0">Guárdalo o tómale captura. Si algún día no te reconoce, toca tu nombre y escríbelo.</p><button class="linkbtn" id="npin-hide">Ya lo guardé</button>`;
   } else pinCard.style.display="none";
   const firstCard=$("#pc-0"); firstCard.parentNode.insertBefore(pinCard, firstCard);
   const nh=$("#npin-hide"); if(nh) nh.onclick=()=>{ lsDel("newpin-"+ev); pinCard.style.display="none"; };
-  const nok=$("#npin-ok"); if(nok) nok.onclick=async()=>{ const v=$("#npin").value.trim(); if(!pinOk(v)){ $("#npin-err").textContent="Son 4 números."; return; }
+  const nok=$("#npin-ok"); if(nok) nok.onclick=async()=>{ const v=$("#npin").value.trim(); if(!pinOk(v)){ $("#npin-err").textContent="Son 3 números."; return; }
     nok.disabled=true; nok.textContent="Guardando…";
     try{ await dbPut(`${ev}/claims/${k}`,Object.assign({},myClaim,{name:me,dev:DEV,pin:pinHash(ev,k,v)})); lsSet("newpin-"+ev,v); renderJoin(ev); }
     catch(e){ $("#npin-err").textContent="No se pudo guardar. Revisa tu internet."; nok.disabled=false; nok.textContent="Guardar PIN"; } };
