@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Intercambio de regalos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --pine:#0e3a2c; --pine2:#14523e; --cream:#fff8ec; --ink:#2a1d14; --muted:#7a6a5c;
+    --red:#c8202f; --red2:#a3141f; --gold:#e9b44c; --gold2:#c98f22; --line:#eadbc4; --ok:#1f8a52;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;min-height:100%}
+  html{background:#0b2d22}
+  body{
+    font-family:Nunito,system-ui,sans-serif;color:var(--ink);
+    background:radial-gradient(120% 80% at 50% 0%, var(--pine2) 0%, var(--pine) 60%, #082419 100%) fixed;
+    min-height:100vh;overflow-x:hidden;
+  }
+  .snow{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:.55;
+    background-image:
+      radial-gradient(2px 2px at 20px 30px,#fff,transparent),
+      radial-gradient(2px 2px at 120px 80px,#fff,transparent),
+      radial-gradient(1.5px 1.5px at 200px 150px,#fff,transparent),
+      radial-gradient(2px 2px at 300px 40px,#fff,transparent),
+      radial-gradient(1.5px 1.5px at 80px 200px,#fff,transparent),
+      radial-gradient(2px 2px at 260px 230px,#fff,transparent);
+    background-size:340px 260px;animation:fall 18s linear infinite}
+  @keyframes fall{from{background-position:0 0}to{background-position:60px 520px}}
+  .wrap{position:relative;z-index:1;max-width:480px;margin:0 auto;padding:22px 16px 60px}
+  header{text-align:center;color:var(--cream);margin:6px 0 18px}
+  header .tag{display:inline-block;font-weight:800;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);}
+  h1{font-family:"Baloo 2",cursive;font-weight:800;font-size:34px;line-height:1.05;margin:4px 0 6px}
+  header p{margin:0;opacity:.8;font-size:15px}
+  .card{background:var(--cream);border-radius:20px;padding:18px 16px;margin:0 0 14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .card h2{font-family:"Baloo 2",cursive;font-size:21px;margin:0 0 10px;display:flex;align-items:center;gap:8px}
+  .card h2 .count{margin-left:auto;font-family:Nunito;font-size:13px;font-weight:800;background:var(--pine);color:var(--cream);border-radius:99px;padding:3px 10px}
+  label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:10px 0 4px}
+  input{width:100%;font:inherit;font-size:16px;padding:12px 12px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);outline:none}
+  input:focus{border-color:var(--gold)}
+  .row{display:flex;gap:8px}
+  .row > *{flex:1;min-width:0}
+  .add{display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:6px}
+  .btn{font:inherit;font-weight:800;border:0;border-radius:14px;padding:13px 16px;cursor:pointer;font-size:16px;display:inline-flex;align-items:center;justify-content:center;gap:8px;text-decoration:none;transition:transform .08s}
+  .btn:active{transform:scale(.97)}
+  .btn.red{background:var(--red);color:#fff;box-shadow:0 4px 0 var(--red2)}
+  .btn.gold{background:var(--gold);color:var(--ink);box-shadow:0 4px 0 var(--gold2)}
+  .btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--line)}
+  .btn.wa{background:#25d366;color:#08331a;box-shadow:0 4px 0 #179c48;padding:10px 12px;font-size:14px}
+  .btn.small{padding:10px 12px;font-size:14px}
+  .btn.block{width:100%}
+  .btn[disabled]{opacity:.45;pointer-events:none}
+  .plus{width:48px;padding:0;font-size:24px}
+  ul.people{list-style:none;margin:12px 0 0;padding:0}
+  ul.people li{display:flex;align-items:center;gap:10px;padding:10px 4px;border-top:1px dashed var(--line)}
+  ul.people li:first-child{border-top:0}
+  .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:800;color:#fff;flex:none;font-size:15px}
+  .pname{font-weight:800}
+  .pphone{font-size:12px;color:var(--muted)}
+  .grow{flex:1;min-width:0}
+  .x{border:0;background:transparent;font-size:20px;color:var(--muted);cursor:pointer;padding:4px 8px}
+  .hint{font-size:13px;color:var(--muted);margin:8px 0 0}
+  .empty{color:var(--muted);text-align:center;padding:14px 0 4px;font-size:14px}
+  .linkbtn{border:0;background:none;color:var(--red);font:inherit;font-weight:800;font-size:14px;cursor:pointer;padding:6px 0}
+  .sticky{position:sticky;bottom:12px;z-index:3}
+  .err{color:var(--red);font-weight:700;font-size:14px;margin-top:8px;min-height:1em}
+
+  /* tómbola */
+  .tombola{text-align:center;color:var(--cream);padding:50px 0}
+  .drum{font-family:"Baloo 2";font-size:40px;font-weight:800;height:60px;color:var(--gold)}
+  .spin{width:90px;height:90px;margin:0 auto 18px;border-radius:50%;border:8px solid rgba(255,255,255,.15);border-top-color:var(--gold);animation:rot .7s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  .res li{flex-wrap:wrap}
+  .res .acts{display:flex;gap:6px}
+  .sent{font-size:12px;font-weight:800;color:var(--ok)}
+  .spoiler{background:#fff;border:2px dashed var(--line);border-radius:14px;padding:12px;margin-top:10px}
+  .pair{display:flex;align-items:center;gap:8px;padding:6px 0;font-weight:700}
+  .pair .arrow{color:var(--red)}
+  .confirm{background:#fff3f3;border:2px solid #f3c2c5;border-radius:14px;padding:12px;margin-top:10px;font-size:14px}
+  .linkbox{width:100%;font-size:12px;margin-top:8px}
+
+  /* participante */
+  .stage{text-align:center;color:var(--cream);padding-top:10px}
+  .stage h1{font-size:38px}
+  .gift{position:relative;width:200px;height:200px;margin:34px auto 10px;cursor:pointer;user-select:none}
+  .gift .box{position:absolute;bottom:0;left:15px;width:170px;height:130px;background:var(--red);border-radius:10px;box-shadow:inset 0 -14px 0 rgba(0,0,0,.15),0 18px 30px rgba(0,0,0,.35)}
+  .gift .box:before{content:"";position:absolute;left:72px;top:0;width:26px;height:100%;background:var(--gold)}
+  .gift .lid{position:absolute;top:44px;left:5px;width:190px;height:40px;background:var(--red2);border-radius:10px;transition:transform .7s cubic-bezier(.3,1.6,.5,1),opacity .7s;z-index:2;box-shadow:0 6px 0 rgba(0,0,0,.15)}
+  .gift .lid:before{content:"";position:absolute;left:82px;top:0;width:26px;height:100%;background:var(--gold2)}
+  .gift .bow{position:absolute;left:58px;top:-36px;width:74px;height:40px}
+  .gift .bow:before,.gift .bow:after{content:"";position:absolute;top:4px;width:36px;height:30px;border:9px solid var(--gold);border-radius:50% 50% 50% 50%/60% 60% 40% 40%}
+  .gift .bow:before{left:-4px;transform:rotate(-22deg)}
+  .gift .bow:after{right:-4px;transform:rotate(22deg)}
+  .gift.shake{animation:shake .45s}
+  @keyframes shake{0%,100%{transform:rotate(0)}20%{transform:rotate(-9deg) scale(1.04)}40%{transform:rotate(8deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(4deg)}}
+  .gift.open .lid{transform:translate(40px,-170px) rotate(28deg);opacity:0}
+  .gift.open .box{animation:pop .5s}
+  @keyframes pop{50%{transform:scaleY(.9)}}
+  .dots{display:flex;gap:10px;justify-content:center;margin:12px 0}
+  .dots i{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.2);transition:.2s}
+  .dots i.on{background:var(--gold);transform:scale(1.2)}
+  .tap{font-weight:800;font-size:17px;opacity:.9}
+  .reveal{display:none;margin-top:-30px}
+  .reveal.show{display:block;animation:rise .7s cubic-bezier(.2,1.4,.4,1)}
+  @keyframes rise{from{opacity:0;transform:translateY(60px) scale(.8)}}
+  .reveal .card{text-align:center;padding:24px 18px}
+  .reveal .lbl{font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-size:12px}
+  .reveal .who{font-family:"Baloo 2";font-weight:800;font-size:44px;line-height:1.05;color:var(--red);margin:6px 0 4px;word-break:break-word}
+  .meta{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:14px 0 4px}
+  .chip{background:#fff;border:2px solid var(--line);border-radius:99px;padding:6px 12px;font-weight:800;font-size:14px}
+  .secret{font-size:14px;color:var(--muted);margin:10px 0 16px}
+  .wheelwrap{position:relative;width:fit-content;margin:26px auto 22px}
+  .wheelwrap canvas{display:block;border-radius:50%;box-shadow:0 18px 40px rgba(0,0,0,.4)}
+  .pointer{position:absolute;left:50%;top:-14px;transform:translateX(-50%);width:0;height:0;border-left:16px solid transparent;border-right:16px solid transparent;border-top:30px solid var(--cream);z-index:2;filter:drop-shadow(0 3px 3px rgba(0,0,0,.35))}
+  .hub{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:58px;height:58px;border-radius:50%;background:var(--cream);display:grid;place-items:center;font-size:28px;box-shadow:0 4px 12px rgba(0,0,0,.3);border:4px solid var(--gold)}
+  .reveal{margin-top:0 !important}
+  .wish{margin-top:6px;padding:8px 10px;font-size:14px;border-width:1.5px}
+  textarea{width:100%;font:inherit;font-size:15px;padding:12px;border:2px solid var(--line);border-radius:12px;background:#fff;color:var(--ink);outline:none;resize:vertical;min-height:90px}
+  textarea:focus{border-color:var(--gold)}
+  .wishbox{margin-top:14px;padding-top:14px;border-top:2px solid var(--line)}
+  .wishbox h3{font-family:"Baloo 2";font-size:18px;margin:0 0 4px}
+  .ok{color:var(--ok);font-weight:800;font-size:14px;margin-top:8px}
+  .giftwish{background:#fff;border:2px dashed var(--gold);border-radius:14px;padding:12px;margin:14px 0 4px;text-align:left}
+  .giftwish b{display:block;font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold2);margin-bottom:4px}
+  .giftwish div{white-space:pre-wrap;word-break:break-word;font-weight:700}
+  .namechips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0}
+  .namechip{border:2px solid var(--line);background:#fff;border-radius:99px;padding:9px 14px;font:inherit;font-weight:800;cursor:pointer;color:var(--ink)}
+  .namechip.on{background:var(--red);border-color:var(--red);color:#fff}
+  canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
+  .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="snow"></div>
+<canvas id="cf"></canvas>
+<div class="wrap" id="app"></div>
+
+<script>
+// ===== Configuración =====
+// Link de esta página: toma la dirección donde esté publicada (Netlify, Tiiny, etc.)
+const BASE_URL = (/^https?:$/.test(location.protocol) && !/claude|usercontent|sandbox/i.test(location.hostname))
+  ? location.origin + location.pathname
+  : "https://claude.ai/artifact/SqnDwQkEuu3hrmEv7gzDcj";
+const KEY = "andamiosmilenium-intercambio";
+const STORE = "intercambio-v1";
+const COLORS = ["#c8202f","#1f8a52","#c98f22","#2f6db5","#8a3fb5","#d2582a","#0f7c80","#b5306f"];
+
+// ===== Utilidades =====
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
+const colorFor = n => { let h=0; for (const c of n) h=(h*31+c.charCodeAt(0))>>>0; return COLORS[h%COLORS.length]; };
+function phoneNorm(p){ const d=(p||"").replace(/\D/g,""); if(!d) return ""; if(d.length===10) return "52"+d; return d; }
+function waLink(phone, text){ const p=phoneNorm(phone); return "https://wa.me/"+(p||"")+"?text="+encodeURIComponent(text); }
+
+const A32="0123456789abcdefghijklmnopqrstuv";
+function b32enc(bytes){ let bits=0,val=0,out=""; for(const b of bytes){ val=(val<<8)|b; bits+=8; while(bits>=5){ out+=A32[(val>>>(bits-5))&31]; bits-=5; } val&=(1<<bits)-1; } if(bits>0) out+=A32[(val<<(5-bits))&31]; return out; }
+function b32dec(str){ let bits=0,val=0; const out=[]; for(const ch of str){ const i=A32.indexOf(ch); if(i<0) throw 0; val=(val<<5)|i; bits+=5; if(bits>=8){ out.push((val>>>(bits-8))&255); bits-=8; } val&=(1<<bits)-1; } return new Uint8Array(out); }
+const kb = new TextEncoder().encode(KEY);
+function xor(bytes){ return bytes.map((b,i)=> b ^ kb[i%kb.length] ^ ((i*7)&255)); }
+function encode(obj){ return "x"+b32enc(xor(new TextEncoder().encode(JSON.stringify(obj)))); }
+function decode(h){ try{ if(!h.startsWith("x")) return null; return JSON.parse(new TextDecoder().decode(xor(b32dec(h.slice(1))))); }catch(e){ return null; } }
+
+const normTxt = t => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
+function wishOf(name){ return ((S.people.find(x=>x.name===name)||{}).wish||"").trim(); }
+function wishLink(){ return BASE_URL + "#" + encode([2,S.org.trim()||"El organizador",phoneNorm(S.orgPhone),S.title,S.people.map(p=>p.name),S.budget.trim(),S.date.trim()]); }
+function wishMsg(){ return `🎁 ¡Hola! Para el ${S.title}: entra aquí, elige tu nombre y escribe qué regalo te gustaría recibir${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}:\n${wishLink()}`; }
+// Lee los mensajes pegados de WhatsApp: "Regalo que quiero — Ana:\n<regalo>\n🎄 ..."
+function parseWishes(text){
+  const parts=text.split(/Regalo que quiero/i).slice(1); const found=[], unknown=[];
+  for(const part of parts){
+    const lines=part.split(/\r?\n/);
+    const name=lines[0].replace(/^[\s—–-]+/,"").replace(/:\s*$/,"").trim();
+    const body=[];
+    for(const l of lines.slice(1)){ if(/^\s*🎄/.test(l) || /^\s*\[\d/.test(l) || /^\s*\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)) break; body.push(l); }
+    const wish=body.join("\n").trim().slice(0,300);
+    const p=S.people.find(x=>normTxt(x.name)===normTxt(name));
+    if(p && wish){ p.wish=wish; found.push(p.name); } else if(name) unknown.push(name);
+  }
+  return {found,unknown};
+}
+function load(){ try{ return JSON.parse(localStorage.getItem(STORE))||null; }catch(e){ return null; } }
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(e){} }
+
+// ===== Estado del organizador =====
+let S = load() || { title:"Intercambio Navideño 2026", org:"", orgPhone:"", budget:"", date:"", people:[], draw:null, sent:{} };
+
+// ===== Sorteo: un solo ciclo, nadie se toca a sí mismo ni hay "parejas" A↔B (con 3+) =====
+function doDraw(names){
+  const a=[...names];
+  for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
+  return a.map((g,i)=>({g, r:a[(i+1)%a.length]}));
+}
+function linkFor(p){ return BASE_URL + "#" + encode([1,p.g,p.r,S.org,phoneNorm(S.orgPhone),S.budget,S.date,S.title,S.draw.map(x=>x.g),wishOf(p.r)]); }
+
+// ===== Vistas del organizador =====
+function renderSetup(){
+  const n=S.people.length;
+  $("#app").innerHTML = `
+    <header><span class="tag">🎄 Modo organizador</span><h1>Intercambio de regalos</h1><p>Mete a las personas, haz el sorteo y mándale a cada quien su regalo.</p></header>
+    <div class="card">
+      <h2>📝 Datos</h2>
+      <label>Nombre del intercambio</label><input id="f-title" value="${esc(S.title)}" placeholder="Intercambio Navideño 2026">
+      <div class="row">
+        <div><label>Tu nombre</label><input id="f-org" value="${esc(S.org)}" placeholder="Brayan"></div>
+        <div><label>Tu WhatsApp</label><input id="f-orgPhone" inputmode="tel" value="${esc(S.orgPhone)}" placeholder="844 123 4567"></div>
+      </div>
+      <div class="row">
+        <div><label>Presupuesto</label><input id="f-budget" value="${esc(S.budget)}" placeholder="$1,000"></div>
+        <div><label>Fecha</label><input id="f-date" value="${esc(S.date)}" placeholder="24 de diciembre"></div>
+      </div>
+      <p class="hint">Tu WhatsApp sirve para que cada persona te avise cuando ya giró la ruleta, y para que te lleguen los regalos que quieren.</p>
+    </div>
+    <div class="card">
+      <h2>👥 Participantes <span class="count">${n}</span></h2>
+      <div class="add">
+        <input id="p-name" placeholder="Nombre" autocomplete="off">
+        <input id="p-phone" inputmode="tel" placeholder="WhatsApp (opcional)">
+        <button class="btn red plus" id="p-add" aria-label="Agregar">+</button>
+      </div>
+      <div class="err" id="p-err"></div>
+      ${n? `<ul class="people">${S.people.map((p,i)=>`
+        <li><span class="av" style="background:${colorFor(p.name)}">${esc(initials(p.name))}</span>
+        <div class="grow"><div class="pname">${esc(p.name)}</div><div class="pphone">${p.phone?esc(p.phone):"Sin número — eliges el contacto al mandar"}</div>
+        <input class="wish" data-wish="${i}" value="${esc(p.wish||"")}" placeholder="🎁 Regalo que quiere (opcional)" maxlength="300"></div>
+        <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
+      : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
+      ${n?`<div class="wishbox">
+        <h3>🎁 Que cada quien ponga su regalo</h3>
+        <p class="hint" style="margin-top:0">Manda este link al grupo. Cada quien elige su nombre, escribe qué quiere y te llega a tu WhatsApp. Luego pegas aquí los mensajes y se acomodan solos.</p>
+        <div class="row" style="margin-top:10px">
+          <a class="btn wa" id="wl-wa" target="_blank" rel="noopener" href="${waLink("", wishMsg())}">Mandar al grupo</a>
+          <button class="btn ghost small" id="wl-copy">Copiar link</button>
+        </div>
+        <input class="linkbox" id="wl-box" readonly style="display:none">
+        <div class="err" id="wl-err">${phoneNorm(S.orgPhone)?"":"Primero pon tu WhatsApp arriba para que te lleguen los regalos."}</div>
+        <textarea id="paste" placeholder="Pega aquí los mensajes que te lleguen (puedes pegar varios juntos)"></textarea>
+        <button class="btn gold block" id="parse" style="margin-top:8px">Agregar regalos</button>
+        <div id="paste-msg"></div>
+      </div>`:""}
+      ${S.org && !S.people.some(p=>p.name.toLowerCase()===S.org.trim().toLowerCase()) ? `<button class="linkbtn" id="add-me">+ Agregarme a mí (${esc(S.org)})</button>`:""}
+    </div>
+    <div class="sticky"><button class="btn gold block" id="go" ${n<3?"disabled":""}>🎲 Hacer el sorteo ${n<3?`(faltan ${3-n})`:""}</button></div>
+    ${S.draw?`<p style="text-align:center"><button class="linkbtn" style="color:var(--gold)" id="back-res">Ver el último sorteo →</button></p>`:""}
+  `;
+  ["title","org","orgPhone","budget","date"].forEach(k=>{
+    $("#f-"+k).addEventListener("input",e=>{ S[k]=e.target.value; save(); if(k==="org") toggleAddMe(); });
+  });
+  const add=()=>{
+    const name=$("#p-name").value.trim(), phone=$("#p-phone").value.trim();
+    if(!name){ $("#p-err").textContent="Escribe un nombre."; return; }
+    if(S.people.some(p=>p.name.toLowerCase()===name.toLowerCase())){ $("#p-err").textContent="Ese nombre ya está. Ponle apellido o apodo."; return; }
+    S.people.push({name,phone}); save(); renderSetup(); $("#p-name").focus();
+  };
+  $("#p-add").onclick=add;
+  $("#p-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#p-phone").focus(); }});
+  $("#p-phone").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); }});
+  document.querySelectorAll("[data-wish]").forEach(inp=>inp.addEventListener("input",()=>{ S.people[+inp.dataset.wish].wish=inp.value; save(); }));
+  const refreshWL=()=>{ const a=$("#wl-wa"); if(a){ a.href=waLink("", wishMsg()); $("#wl-err").textContent=phoneNorm(S.orgPhone)?"":"Primero pon tu WhatsApp arriba para que te lleguen los regalos."; } };
+  ["title","org","orgPhone","budget","date"].forEach(k=>$("#f-"+k).addEventListener("input",refreshWL));
+  const wc=$("#wl-copy"); if(wc) wc.onclick=async()=>{ try{ await navigator.clipboard.writeText(wishLink()); wc.textContent="¡Copiado!"; }catch(e){ const b=$("#wl-box"); b.style.display="block"; b.value=wishLink(); b.select(); wc.textContent="Cópialo ↓"; } };
+  const pb=$("#parse"); if(pb) pb.onclick=()=>{
+    const r=parseWishes($("#paste").value);
+    if(!r.found.length && !r.unknown.length){ $("#paste-msg").innerHTML=`<div class="err">No encontré regalos en lo que pegaste. Copia el mensaje completo de WhatsApp.</div>`; return; }
+    save(); renderSetup();
+    $("#paste-msg").innerHTML=(r.found.length?`<div class="ok">✓ Regalo agregado: ${r.found.map(esc).join(", ")}</div>`:"")+(r.unknown.length?`<div class="err">No encontré en la lista a: ${r.unknown.map(esc).join(", ")}</div>`:"");
+    $("#paste-msg").scrollIntoView({block:"center"});
+  };
+  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); save(); renderSetup(); });
+  const me=$("#add-me"); if(me) me.onclick=()=>{ S.people.push({name:S.org.trim(),phone:S.orgPhone}); save(); renderSetup(); };
+  $("#go").onclick=startDraw;
+  const br=$("#back-res"); if(br) br.onclick=renderResults;
+}
+function toggleAddMe(){ /* se actualiza al volver a pintar */ }
+
+function startDraw(){
+  if(!S.org.trim()){ S.org="El organizador"; }
+  const names=S.people.map(p=>p.name);
+  $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><div class="drum" id="drum"></div><p>Revolviendo papelitos…</p></div>`;
+  let t=0; const iv=setInterval(()=>{ $("#drum").textContent=names[Math.floor(Math.random()*names.length)]; t++; },90);
+  setTimeout(()=>{ clearInterval(iv); S.draw=doDraw(names); S.sent={}; S.spoil=false; save(); confetti(); renderResults(); },1900);
+}
+
+function renderResults(){
+  const d=S.draw; if(!d){ renderSetup(); return; }
+  const sentN=Object.keys(S.sent||{}).length;
+  const phoneOf=n=>(S.people.find(p=>p.name===n)||{}).phone||"";
+  $("#app").innerHTML=`
+    <header><span class="tag">✅ Sorteo listo</span><h1>${esc(S.title)}</h1><p>Mándale a cada persona su link: le sale una ruleta y al picarle le toca alguien. Nadie se repite ni le toca a sí mismo.</p></header>
+    <div class="card">
+      <h2>📲 Enviar regalos <span class="count">${sentN}/${d.length}</span></h2>
+      <ul class="people res">${d.map((p,i)=>`
+        <li><span class="av" style="background:${colorFor(p.g)}">${esc(initials(p.g))}</span>
+          <div class="grow"><div class="pname">${esc(p.g)}</div>${S.sent[p.g]?`<div class="sent">✓ Enviado</div>`:`<div class="pphone">${phoneOf(p.g)?esc(phoneOf(p.g)):"Elige el contacto en WhatsApp"}</div>`}</div>
+          <div class="acts">
+            <a class="btn wa" target="_blank" rel="noopener" data-send="${i}" href="${waLink(phoneOf(p.g), `🎁 ¡Hola ${p.g}! Ya se hizo el sorteo del ${S.title}. Entra aquí y pícale a la ruleta para ver a quién te tocó (es secreto 🤫):\n${linkFor(p)}`)}">WhatsApp</a>
+            <button class="btn ghost small" data-copy="${i}">Copiar</button>
+          </div>
+          <input class="linkbox" id="lb-${i}" readonly style="display:none">
+        </li>`).join("")}</ul>
+    </div>
+    <div class="card">
+      <h2>🤫 Resultados</h2>
+      <p class="hint" style="margin-top:0">${S.people.some(p=>p.name===S.org)?"Ojo: tú también participas, si los ves se te arruina la sorpresa.":"Solo tú puedes verlos desde aquí."}</p>
+      ${S.spoil?`<div class="spoiler">${d.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}${wishOf(p.r)?`<span class="pphone" style="width:100%;font-weight:600">🎁 ${esc(wishOf(p.r))}</span>`:""}</div>`).join("")}</div>
+        <button class="linkbtn" id="hide">Ocultar</button>`
+      :`<button class="btn ghost block" id="spoil" style="margin-top:6px">👀 Ver quién le tocó a quién</button>`}
+      <a class="btn wa block" style="margin-top:10px;padding:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `📋 ${S.title} — resultados del sorteo:\n`+d.map(p=>`• ${p.g} → ${p.r}${wishOf(p.r)?` (🎁 ${wishOf(p.r)})`:""}`).join("\n"))}">Mandarme la lista a mi WhatsApp</a>
+      ${phoneNorm(S.orgPhone)?"":`<p class="hint">Pon tu WhatsApp en los datos para que te llegue directo.</p>`}
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="edit" style="color:var(--cream);border-color:rgba(255,255,255,.3)">✏️ Editar</button>
+      <button class="btn ghost" id="redo" style="color:var(--cream);border-color:rgba(255,255,255,.3)">🎲 Volver a sortear</button>
+    </div>
+    <div id="redo-box"></div>
+    <p class="foot">Los links ya traen el resultado: aunque cierres esta página, siguen funcionando.<br>Si alguien te manda su regalo después del sorteo, agrégalo en ✏️ Editar y vuelve a mandar el link a quien le tocó esa persona: el resultado no cambia, solo ya le sale el regalo.</p>
+  `;
+  document.querySelectorAll("[data-send]").forEach(a=>a.addEventListener("click",()=>{ const p=d[+a.dataset.send]; S.sent[p.g]=1; save(); setTimeout(renderResults,400); }));
+  document.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{
+    const i=+b.dataset.copy, url=linkFor(d[i]);
+    try{ await navigator.clipboard.writeText(url); b.textContent="¡Copiado!"; S.sent[d[i].g]=1; save(); }
+    catch(e){ const lb=$("#lb-"+i); lb.style.display="block"; lb.value=url; lb.select(); b.textContent="Cópialo ↓"; }
+  });
+  const sp=$("#spoil"); if(sp) sp.onclick=()=>{ S.spoil=true; save(); renderResults(); };
+  const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderResults(); };
+  $("#edit").onclick=renderSetup;
+  $("#redo").onclick=()=>{
+    $("#redo-box").innerHTML=`<div class="confirm"><b>¿Sortear otra vez?</b><br>Si ya mandaste links, esas personas tendrían un resultado viejo. Tendrías que mandarle el nuevo link a todos.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes">Sí, sortear</button></div></div>`;
+    $("#no").onclick=()=>$("#redo-box").innerHTML="";
+    $("#yes").onclick=startDraw;
+  };
+}
+
+// ===== Vista del participante: ruleta =====
+function renderParticipant(data){
+  const [v,g,r,org,orgPhone,budget,date,title,all,wish]=data;
+  let names=(all||[]).filter(n=>n!==g); if(!names.includes(r)) names.push(r);
+  for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
+  const target=names.indexOf(r);
+  const spunKey="spun-"+location.hash;
+  let already=false; try{ already=localStorage.getItem(spunKey)==="1"; }catch(e){}
+  $("#app").innerHTML=`
+    <div class="stage">
+      <span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(title||"Intercambio")}</span>
+      <h1>¡Hola, ${esc(g)}! 👋</h1>
+      <p style="opacity:.85;margin:0">${esc(org||"El organizador")} te invitó al intercambio. Pícale a la ruleta para ver a quién le das regalo.</p>
+      <div class="wheelwrap"><div class="pointer"></div><canvas id="wheel"></canvas><div class="hub">🎁</div></div>
+      <button class="btn red block" id="spin" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>
+      <div class="reveal" id="rev" style="margin-top:16px">
+        <div class="card">
+          <div class="lbl">Te tocó darle regalo a</div>
+          <div class="who">${esc(r)}</div>
+          ${(budget||date)?`<div class="meta">${budget?`<span class="chip">💰 ${esc(budget)}</span>`:""}${date?`<span class="chip">📅 ${esc(date)}</span>`:""}</div>`:""}
+          <div class="giftwish"><b>🎁 Lo que quiere</b><div>${wish?esc(wish):"No dijo qué quiere… ¡sorpréndele!"}</div></div>
+          <p class="secret">🤫 Es secreto, no le digas a nadie.</p>
+          ${orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(orgPhone, `✅ Ya giré la ruleta del ${title||"intercambio"} — ${g}`)}">Avisarle a ${esc(org||"el organizador")} que ya me tocó</a>`:""}
+        </div>
+      </div>
+    </div>`;
+  const cv=$("#wheel"), ctx=cv.getContext("2d"), dpr=Math.max(1,devicePixelRatio||1);
+  const size=Math.min(320, innerWidth-40); cv.style.width=cv.style.height=size+"px"; cv.width=cv.height=size*dpr;
+  const n=names.length, seg=2*Math.PI/n, R=size*dpr/2;
+  const segCols=["#c8202f","#1f8a52","#e9b44c","#fff8ec","#2f6db5","#a3141f","#14523e","#c98f22"];
+  function draw(rot){
+    ctx.clearRect(0,0,cv.width,cv.height); ctx.save(); ctx.translate(R,R);
+    for(let i=0;i<n;i++){
+      const a0=rot+i*seg, col=segCols[(i+(n%segCols.length===1&&i===n-1?1:0))%segCols.length];
+      ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,R-4*dpr,a0,a0+seg); ctx.closePath();
+      ctx.fillStyle=col; ctx.fill(); ctx.strokeStyle="rgba(0,0,0,.18)"; ctx.lineWidth=2*dpr; ctx.stroke();
+      ctx.save(); ctx.rotate(a0+seg/2); ctx.textAlign="right"; ctx.textBaseline="middle";
+      ctx.fillStyle=(col==="#fff8ec"||col==="#e9b44c")?"#2a1d14":"#fff";
+      const fs=Math.max(11, Math.min(18, 260/n))*dpr; ctx.font=`800 ${fs}px Nunito, sans-serif`;
+      let t=names[i]; if(t.length>13) t=t.slice(0,12)+"…";
+      ctx.fillText(t, R-16*dpr, 0); ctx.restore();
+    }
+    ctx.beginPath(); ctx.arc(0,0,R-3*dpr,0,2*Math.PI); ctx.lineWidth=6*dpr; ctx.strokeStyle="#e9b44c"; ctx.stroke();
+    ctx.restore();
+  }
+  // ángulo final: el centro del segmento ganador queda bajo el puntero (arriba)
+  const jitter=(Math.random()-.5)*seg*.6;
+  const finalRot=-Math.PI/2-(target+.5)*seg+jitter;
+  const norm=x=>((x%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
+  const reveal=()=>{ $("#rev").classList.add("show"); $("#spin").style.display="none"; try{localStorage.setItem(spunKey,"1")}catch(e){} };
+  if(already){ draw(finalRot); reveal(); $("#rev .lbl").textContent="Ya giraste la ruleta — te tocó"; return; }
+  draw(Math.random()*2*Math.PI);
+  $("#spin").onclick=()=>{
+    const btn=$("#spin"); btn.disabled=true; btn.textContent="Girando…";
+    const start=performance.now(), dur=5200, from=Math.random()*2*Math.PI;
+    const to=from+ (2*Math.PI*7) + norm(finalRot-from);
+    let lastSeg=-1;
+    (function frame(now){
+      const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,4), rot=from+(to-from)*e;
+      draw(rot);
+      const cur=Math.floor(norm(-Math.PI/2-rot)/seg);
+      if(cur!==lastSeg){ lastSeg=cur; if(navigator.vibrate) try{navigator.vibrate(8)}catch(_){} }
+      if(t<1) requestAnimationFrame(frame); else { setTimeout(()=>{ confetti(); reveal(); },250); }
+    })(start);
+  };
+}
+
+function renderWish(data){
+  const [v,org,orgPhone,title,names,budget,date]=data; let who="";
+  $("#app").innerHTML=`
+    <div class="stage">
+      <span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(title||"Intercambio")}</span>
+      <h1>¿Qué regalo quieres? 🎁</h1>
+      <p style="opacity:.85;margin:0">Le va a salir a quien te toque en el sorteo.</p>
+      ${(budget||date)?`<div class="meta" style="margin-top:14px">${budget?`<span class="chip" style="color:var(--ink)">💰 Presupuesto: ${esc(budget)}</span>`:""}${date?`<span class="chip" style="color:var(--ink)">📅 ${esc(date)}</span>`:""}</div>`:""}
+    </div>
+    <div class="card" style="margin-top:18px">
+      <h2>1. ¿Quién eres?</h2>
+      <div class="namechips">${(names||[]).map((n,i)=>`<button class="namechip" data-n="${i}">${esc(n)}</button>`).join("")}</div>
+      <h2 style="margin-top:14px">2. ¿Qué te gustaría?</h2>
+      <textarea id="w" maxlength="300" placeholder="Ej. Una sudadera talla M color negro, o unos audífonos"></textarea>
+      <p class="hint">${budget?`Pide algo de hasta <b>${esc(budget)}</b>. `:""}Puedes poner varias opciones, talla, color o tienda.</p>
+      <a class="btn wa block" id="send" style="padding:14px;margin-top:12px;font-size:16px" target="_blank" rel="noopener" href="#">Mandárselo a ${esc(org)} por WhatsApp</a>
+      <div class="err" id="werr"></div>
+      <p class="hint" style="text-align:center">Se abre WhatsApp con tu mensaje listo, solo dale enviar.</p>
+    </div>`;
+  const send=$("#send");
+  const upd=()=>{ const w=$("#w").value.trim(); send.href = (who&&w) ? waLink(orgPhone, `Regalo que quiero — ${who}:\n${w}\n🎄 ${title}`) : "#"; };
+  document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{ document.querySelectorAll(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on"); who=names[+b.dataset.n]; $("#werr").textContent=""; upd(); });
+  $("#w").addEventListener("input",upd);
+  send.addEventListener("click",e=>{ const w=$("#w").value.trim(); if(!who||!w){ e.preventDefault(); $("#werr").textContent=!who?"Elige tu nombre.":"Escribe qué regalo quieres."; } });
+}
+
+function renderBad(){
+  $("#app").innerHTML=`<div class="stage"><h1>Ups 🎁</h1><div class="card" style="color:var(--ink)">Este link no se pudo abrir. Pídele al organizador que te lo vuelva a mandar.</div></div>`;
+}
+
+// ===== Confeti =====
+function confetti(){
+  const c=$("#cf"), x=c.getContext("2d"); c.width=innerWidth; c.height=innerHeight;
+  const cols=["#c8202f","#e9b44c","#1f8a52","#fff8ec","#2f6db5"];
+  const P=Array.from({length:160},()=>({x:c.width/2+(Math.random()-.5)*80,y:c.height*.45,vx:(Math.random()-.5)*14,vy:-Math.random()*16-4,s:Math.random()*7+4,r:Math.random()*6,vr:(Math.random()-.5)*.3,c:cols[Math.floor(Math.random()*cols.length)]}));
+  let f=0; (function step(){ x.clearRect(0,0,c.width,c.height); P.forEach(p=>{ p.vy+=.45; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.r+=p.vr; x.save(); x.translate(p.x,p.y); x.rotate(p.r); x.fillStyle=p.c; x.fillRect(-p.s/2,-p.s/3,p.s,p.s*.6); x.restore(); }); if(++f<170) requestAnimationFrame(step); else x.clearRect(0,0,c.width,c.height); })();
+}
+
+// ===== Router =====
+function route(){
+  const h=location.hash.replace(/^#/,"");
+  if(h){ const d=decode(h); if(d && d[0]===2) renderWish(d); else if(d) renderParticipant(d); else renderBad(); }
+  else if(S.draw && S._view==="res") renderResults();
+  else renderSetup();
+}
+addEventListener("hashchange",route);
+route();
+</script>
+</body>
+</html>
