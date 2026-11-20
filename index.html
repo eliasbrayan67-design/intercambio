@@ -138,6 +138,13 @@
   .rsec{margin-top:16px;padding-top:14px;border-top:2px dashed var(--line)}
   .rsec h3{font-family:"Baloo 2";font-size:19px;margin:0 0 8px}
   .glink{display:inline-block;color:var(--red);font-weight:800;text-decoration:underline;word-break:break-all;margin:2px 0}
+  .wbox{margin-top:8px}
+  .giftwish.wfull{margin:0;padding:10px 12px}
+  .giftwish.wfull div{font-size:15px;line-height:1.4}
+  .wnone{font-size:14px;color:var(--muted);font-weight:700}
+  textarea.wedit{min-height:90px;font-size:15px}
+  .wrap.wide{max-width:720px}
+  @media (min-width:760px){ .wrap.wide ul.people li{padding:14px 6px} }
   .namechip.taken{opacity:.45;cursor:not-allowed}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
@@ -213,6 +220,31 @@ let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
 function drawList(){ if(!LIVE.draw) return []; return Object.values(LIVE.draw).map(decode).filter(Boolean).map(([g,r])=>({g,r})); }
+// Regalo en la pantalla del organizador: se ve completo, con links clicables, y se edita con un botón
+let EDITW={};
+function paintWish(i){
+  const box=$("#wb-"+i), p=S.people[i]; if(!box||!p) return;
+  const w=wishOf(p.name);
+  if(EDITW[i]){
+    box.innerHTML=`<textarea class="wedit" id="wt-${i}" maxlength="800" placeholder="¿Qué regalo quiere ${esc(p.name.split(" ")[0])}? Puedes pegar un link">${esc(w)}</textarea>
+      <div class="row" style="margin-top:6px"><button class="btn ghost small" data-wcancel="${i}">Cancelar</button><button class="btn red small" data-wok="${i}">Guardar</button></div><div class="err" id="we-${i}"></div>`;
+    const ta=$("#wt-"+i); ta.focus(); ta.style.height=Math.max(90,ta.scrollHeight+4)+"px";
+    ta.addEventListener("input",()=>{ ta.style.height="auto"; ta.style.height=Math.max(90,ta.scrollHeight+4)+"px"; });
+    $(`[data-wcancel="${i}"]`).onclick=()=>{ EDITW[i]=false; paintWish(i); };
+    $(`[data-wok="${i}"]`).onclick=async e=>{
+      const v=ta.value.trim(), k=keyOf(p.name), b=e.currentTarget; b.disabled=true; b.textContent="Guardando…";
+      try{ if(v) await dbPut(`${S.ev}/wishes/${k}`,{name:p.name,wish:v.slice(0,800),t:Date.now()}); else await dbDel(`${S.ev}/wishes/${k}`);
+        if(v) LIVE.wishes[k]={name:p.name,wish:v.slice(0,800)}; else delete LIVE.wishes[k];
+        EDITW[i]=false; paintStatus(); paintWish(i); }
+      catch(err){ $("#we-"+i).textContent="No se pudo guardar. Revisa tu internet."; b.disabled=false; b.textContent="Guardar"; }
+    };
+  } else {
+    box.innerHTML = w
+      ? `<div class="giftwish wfull"><b>🎁 Quiere</b><div>${linkify(w)}</div></div><button class="linkbtn" data-wedit-o="${i}">✏️ Cambiar regalo</button>`
+      : `<div class="wnone">🎁 Sin regalo todavía</div><button class="linkbtn" data-wedit-o="${i}">✏️ Escribir su regalo</button>`;
+    $(`[data-wedit-o="${i}"]`).onclick=()=>{ EDITW[i]=true; paintWish(i); };
+  }
+}
 let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,800),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
 
 function doDraw(names, people){
@@ -265,7 +297,7 @@ function renderOrg(){
               <option value="">Él/ella mismo(a)</option>
               ${S.people.filter(o=>o!==p && !effBy(o,S.people) && !S.people.some(x=>x!==o && effBy(x,S.people)===p.name && false)).map(o=>`<option value="${esc(o.name)}" ${effBy(p,S.people)===o.name?"selected":""}>${esc(o.name)}</option>`).join("")}
             </select></label>
-          <input class="wish" data-wish="${i}" value="${esc(wishOf(p.name))}" placeholder="🎁 Regalo que quiere" maxlength="800"></div>
+          <div class="wbox" id="wb-${i}"></div></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
       <div class="ok" id="counts"></div>
@@ -325,7 +357,7 @@ function renderOrg(){
     p.by=sel.value;
     if(p.by) S.people.forEach(x=>{ if(keyOf(x.by||"")===keyOf(p.name)) x.by=""; });   // quien depende de otro no puede tener dependientes
     pushCfg(true); renderOrg(); }));
-  $$("[data-wish]").forEach(inp=>inp.addEventListener("input",()=>pushWish(S.people[+inp.dataset.wish].name, inp.value)));
+  S.people.forEach((p,i)=>paintWish(i));
 
   // link
   const gc=$("#gl-copy"); if(gc) gc.onclick=async()=>{ try{ await navigator.clipboard.writeText(groupLink()); gc.textContent="¡Copiado!"; }catch(e){ const b=$("#gl-box"); b.style.display="block"; b.value=groupLink(); b.select(); gc.textContent="Cópialo ↓"; } };
@@ -356,7 +388,7 @@ function paintStatus(){
   S.people.forEach((p,i)=>{
     const k=keyOf(p.name), by=effBy(p,S.people), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; if(!by){ cl+=c; selfN++; } wi+=w; sp+=s;
     const el=$("#st-"+i); if(el) el.innerHTML = `${by?`<span class="st on">📱 Lo maneja ${esc(by)}</span>`:c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
-    const inp=$(`[data-wish="${i}"]`); if(inp && inp!==document.activeElement && !wishT[p.name+"_typing"]) inp.value=wishOf(p.name);
+    if(!EDITW[i]) paintWish(i);
   });
   const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${selfN} ya entraron · ${wi} de ${S.people.length} regalos puestos`;
   const sc=$("#spuncount"); if(sc) sc.textContent=`✅ Ruletas activadas · ${sp} de ${drawList().length} ya giraron`;
@@ -381,7 +413,7 @@ async function openAdmin(ev){
   try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||""}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
-async function startOrg(){ if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
+async function startOrg(){ $("#app").classList.add("wide"); if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
 
 // ================== Participante (link único) ==================
 let PIV=null;
@@ -389,7 +421,7 @@ function shell(inner){ $("#app").innerHTML=inner; }
 function head(c,h1,sub){ return `<div class="stage"><span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(c.title||"Intercambio")}</span><h1>${h1}</h1>${sub?`<p style="opacity:.85;margin:0">${sub}</p>`:""}
   ${(c.budget||c.date)?`<div class="meta" style="margin-top:12px">${c.budget?`<span class="chip" style="color:var(--ink)">💰 Presupuesto: ${esc(c.budget)}</span>`:""}${c.date?`<span class="chip" style="color:var(--ink)">📅 ${esc(c.date)}</span>`:""}</div>`:""}</div>`; }
 
-async function renderJoin(ev){
+async function renderJoin(ev){ $("#app").classList.remove("wide");
   clearInterval(PIV);
   shell(`<div class="tombola"><div class="spin"></div><p>Cargando…</p></div>`);
   let d; try{ d=await dbGet(ev); }catch(e){ shell(`<div class="stage"><h1>Sin conexión 📶</h1><div class="card" style="color:var(--ink)">No pude cargar el intercambio. Revisa tu internet.<br><br><button class="btn red block" onclick="route()">Intentar otra vez</button></div></div>`); return; }
