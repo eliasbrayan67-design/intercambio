@@ -129,6 +129,11 @@
   .namechips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0}
   .namechip{border:2px solid var(--line);background:#fff;border-radius:99px;padding:9px 14px;font:inherit;font-weight:800;cursor:pointer;color:var(--ink)}
   .namechip.on{background:var(--red);border-color:var(--red);color:#fff}
+  .sts{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+  .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 8px;background:#efe6d6;color:var(--muted);border:0;font-family:inherit}
+  .st.on{background:#dff3e6;color:var(--ok)}
+  .st.free{background:#fde3e5;color:var(--red);cursor:pointer}
+  .namechip.taken{opacity:.45;cursor:not-allowed}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
   .foot{color:rgba(255,248,236,.55);text-align:center;font-size:12px;margin-top:20px}
 </style>
@@ -139,68 +144,73 @@
 <div class="wrap" id="app"></div>
 
 <script>
-// ===== Configuración =====
-// Link de esta página: toma la dirección donde esté publicada (Netlify, Tiiny, etc.)
+// ================== Configuración ==================
 const BASE_URL = (/^https?:$/.test(location.protocol) && !/claude|usercontent|sandbox/i.test(location.hostname))
-  ? location.origin + location.pathname
-  : "https://claude.ai/artifact/SqnDwQkEuu3hrmEv7gzDcj";
+  ? location.origin + location.pathname : "https://eliasbrayan67-design.github.io/intercambio/";
+const DB_URL = "https://intercambio-821ea-default-rtdb.firebaseio.com".replace(/\/+$/,"");   // Firebase Realtime Database
 const KEY = "andamiosmilenium-intercambio";
-const STORE = "intercambio-v1";
+const STORE = "intercambio-v2";
 const COLORS = ["#c8202f","#1f8a52","#c98f22","#2f6db5","#8a3fb5","#d2582a","#0f7c80","#b5306f"];
 
-// ===== Utilidades =====
+// ================== Utilidades ==================
 const $ = s => document.querySelector(s);
-const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const $$ = s => document.querySelectorAll(s);
+const esc = s => String(s??"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const initials = n => n.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join("").toUpperCase();
 const colorFor = n => { let h=0; for (const c of n) h=(h*31+c.charCodeAt(0))>>>0; return COLORS[h%COLORS.length]; };
-function phoneNorm(p){ const d=(p||"").replace(/\D/g,""); if(!d) return ""; if(d.length===10) return "52"+d; return d; }
-function waLink(phone, text){ const p=phoneNorm(phone); return "https://wa.me/"+(p||"")+"?text="+encodeURIComponent(text); }
+const keyOf = n => String(n).normalize("NFD").replace(/[̀-ͯ]/g,"").toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "x";
+const rand = () => Math.random().toString(36).slice(2,10);
+function phoneNorm(p){ const d=(p||"").replace(/\D/g,""); if(!d) return ""; return d.length===10 ? "52"+d : d; }
+function waLink(phone, text){ return "https://wa.me/"+phoneNorm(phone)+"?text="+encodeURIComponent(text); }
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
 
 const A32="0123456789abcdefghijklmnopqrstuv";
 function b32enc(bytes){ let bits=0,val=0,out=""; for(const b of bytes){ val=(val<<8)|b; bits+=8; while(bits>=5){ out+=A32[(val>>>(bits-5))&31]; bits-=5; } val&=(1<<bits)-1; } if(bits>0) out+=A32[(val<<(5-bits))&31]; return out; }
 function b32dec(str){ let bits=0,val=0; const out=[]; for(const ch of str){ const i=A32.indexOf(ch); if(i<0) throw 0; val=(val<<5)|i; bits+=5; if(bits>=8){ out.push((val>>>(bits-8))&255); bits-=8; } val&=(1<<bits)-1; } return new Uint8Array(out); }
 const kb = new TextEncoder().encode(KEY);
-function xor(bytes){ return bytes.map((b,i)=> b ^ kb[i%kb.length] ^ ((i*7)&255)); }
+const xor = bytes => bytes.map((b,i)=> b ^ kb[i%kb.length] ^ ((i*7)&255));
 function encode(obj){ return "x"+b32enc(xor(new TextEncoder().encode(JSON.stringify(obj)))); }
-function decode(h){ try{ if(!h.startsWith("x")) return null; return JSON.parse(new TextDecoder().decode(xor(b32dec(h.slice(1))))); }catch(e){ return null; } }
+function decode(h){ try{ if(!h||!h.startsWith("x")) return null; return JSON.parse(new TextDecoder().decode(xor(b32dec(h.slice(1))))); }catch(e){ return null; } }
 
-const normTxt = t => String(t).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim();
-function wishOf(name){ return ((S.people.find(x=>x.name===name)||{}).wish||"").trim(); }
-function wishLink(){ return BASE_URL + "#" + encode([2,S.org.trim()||"El organizador",phoneNorm(S.orgPhone),S.title,S.people.map(p=>p.name),S.budget.trim(),S.date.trim()]); }
-function wishMsg(){ return `🎁 ¡Hola! Para el ${S.title}: entra aquí, elige tu nombre y escribe qué regalo te gustaría recibir${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}:\n${wishLink()}`; }
-// Lee los mensajes pegados de WhatsApp: "Regalo que quiero — Ana:\n<regalo>\n🎄 ..."
-function parseWishes(text){
-  const parts=text.split(/Regalo que quiero/i).slice(1); const found=[], unknown=[];
-  for(const part of parts){
-    const lines=part.split(/\r?\n/);
-    const name=lines[0].replace(/^[\s—–-]+/,"").replace(/:\s*$/,"").trim();
-    const body=[];
-    for(const l of lines.slice(1)){ if(/^\s*🎄/.test(l) || /^\s*\[\d/.test(l) || /^\s*\d{1,2}\/\d{1,2}\/\d{2,4}/.test(l)) break; body.push(l); }
-    const wish=body.join("\n").trim().slice(0,300);
-    const p=S.people.find(x=>normTxt(x.name)===normTxt(name));
-    if(p && wish){ p.wish=wish; found.push(p.name); } else if(name) unknown.push(name);
-  }
-  return {found,unknown};
-}
-function load(){ try{ return JSON.parse(localStorage.getItem(STORE))||null; }catch(e){ return null; } }
-function save(){ try{ localStorage.setItem(STORE, JSON.stringify(S)); }catch(e){} }
+// ================== Base de datos ==================
+const dbUrl = p => `${DB_URL}/intercambio/${p}.json`;
+async function dbGet(p){ const r=await fetch(dbUrl(p),{cache:"no-store"}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function dbPut(p,v){ const r=await fetch(dbUrl(p),{method:"PUT",body:JSON.stringify(v)}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function dbDel(p){ const r=await fetch(dbUrl(p),{method:"DELETE"}); if(!r.ok) throw new Error(r.status); }
 
-// ===== Estado del organizador =====
-let S = load() || { title:"Intercambio Navideño 2026", org:"", orgPhone:"", budget:"", date:"", people:[], draw:null, sent:{} };
+let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
-// ===== Sorteo: un solo ciclo, nadie se toca a sí mismo ni hay "parejas" A↔B (con 3+) =====
+// ================== Organizador ==================
+let S = JSON.parse(lsGet(STORE)||lsGet("intercambio-v1")||"null") || {};
+S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false}, S);
+S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||""}));
+if(!S.ev) S.ev=rand();
+function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil})); }
+save();
+let LIVE={claims:{},wishes:{},spun:{},draw:null}, NET=true;
+const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
+const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
+const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||""}))});
+let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
+async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
+const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
+function drawList(){ if(!LIVE.draw) return []; return Object.values(LIVE.draw).map(decode).filter(Boolean).map(([g,r])=>({g,r})); }
+let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,300),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
+
 function doDraw(names){
   const a=[...names];
   for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-  return a.map((g,i)=>({g, r:a[(i+1)%a.length]}));
+  return a.map((g,i)=>({g, r:a[(i+1)%a.length]}));   // un solo ciclo: nadie se repite ni se toca a sí mismo
 }
-function linkFor(p){ return BASE_URL + "#" + encode([1,p.g,p.r,S.org,phoneNorm(S.orgPhone),S.budget,S.date,S.title,S.draw.map(x=>x.g),wishOf(p.r)]); }
 
-// ===== Vistas del organizador =====
-function renderSetup(){
-  const n=S.people.length;
+function renderOrg(){
+  const n=S.people.length, drawn=!!LIVE.draw, dl=drawList();
+  const drawNames=new Set(dl.map(x=>x.g)); const changed = drawn && (dl.length!==n || S.people.some(p=>!drawNames.has(p.name)));
   $("#app").innerHTML = `
-    <header><span class="tag">🎄 Modo organizador</span><h1>Intercambio de regalos</h1><p>Mete a las personas, haz el sorteo y mándale a cada quien su regalo.</p></header>
+    <header><span class="tag">🎄 Modo organizador</span><h1>${esc(S.title||"Intercambio de regalos")}</h1><p>Solo tú ves esta pantalla.</p></header>
+    <div class="err" id="net" style="color:#ffd2d2;text-align:center"></div>
     <div class="card">
       <h2>📝 Datos</h2>
       <label>Nombre del intercambio</label><input id="f-title" value="${esc(S.title)}" placeholder="Intercambio Navideño 2026">
@@ -212,8 +222,8 @@ function renderSetup(){
         <div><label>Presupuesto</label><input id="f-budget" value="${esc(S.budget)}" placeholder="$1,000"></div>
         <div><label>Fecha</label><input id="f-date" value="${esc(S.date)}" placeholder="24 de diciembre"></div>
       </div>
-      <p class="hint">Tu WhatsApp sirve para que cada persona te avise cuando ya giró la ruleta, y para que te lleguen los regalos que quieren.</p>
     </div>
+
     <div class="card">
       <h2>👥 Participantes <span class="count">${n}</span></h2>
       <div class="add">
@@ -222,146 +232,217 @@ function renderSetup(){
         <button class="btn red plus" id="p-add" aria-label="Agregar">+</button>
       </div>
       <div class="err" id="p-err"></div>
+      <div id="addme-wrap"></div>
       ${n? `<ul class="people">${S.people.map((p,i)=>`
         <li><span class="av" style="background:${colorFor(p.name)}">${esc(initials(p.name))}</span>
-        <div class="grow"><div class="pname">${esc(p.name)}</div><div class="pphone">${p.phone?esc(p.phone):"Sin número — eliges el contacto al mandar"}</div>
-        <input class="wish" data-wish="${i}" value="${esc(p.wish||"")}" placeholder="🎁 Regalo que quiere (opcional)" maxlength="300"></div>
+        <div class="grow"><div class="pname">${esc(p.name)}</div>
+          <div class="sts" id="st-${i}"></div>
+          <input class="wish" data-wish="${i}" value="${esc(wishOf(p.name))}" placeholder="🎁 Regalo que quiere" maxlength="300"></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
-      ${n?`<div class="wishbox">
-        <h3>🎁 Que cada quien ponga su regalo</h3>
-        <p class="hint" style="margin-top:0">Manda este link al grupo. Cada quien elige su nombre, escribe qué quiere y te llega a tu WhatsApp. Luego pegas aquí los mensajes y se acomodan solos.</p>
-        <div class="row" style="margin-top:10px">
-          <a class="btn wa" id="wl-wa" target="_blank" rel="noopener" href="${waLink("", wishMsg())}">Mandar al grupo</a>
-          <button class="btn ghost small" id="wl-copy">Copiar link</button>
-        </div>
-        <input class="linkbox" id="wl-box" readonly style="display:none">
-        <div class="err" id="wl-err">${phoneNorm(S.orgPhone)?"":"Primero pon tu WhatsApp arriba para que te lleguen los regalos."}</div>
-        <textarea id="paste" placeholder="Pega aquí los mensajes que te lleguen (puedes pegar varios juntos)"></textarea>
-        <button class="btn gold block" id="parse" style="margin-top:8px">Agregar regalos</button>
-        <div id="paste-msg"></div>
-      </div>`:""}
-      ${S.org && !S.people.some(p=>p.name.toLowerCase()===S.org.trim().toLowerCase()) ? `<button class="linkbtn" id="add-me">+ Agregarme a mí (${esc(S.org)})</button>`:""}
+      <div class="ok" id="counts"></div>
     </div>
-    <div class="sticky"><button class="btn gold block" id="go" ${n<3?"disabled":""}>🎲 Hacer el sorteo ${n<3?`(faltan ${3-n})`:""}</button></div>
-    ${S.draw?`<p style="text-align:center"><button class="linkbtn" style="color:var(--gold)" id="back-res">Ver el último sorteo →</button></p>`:""}
+
+    ${n?`<div class="card">
+      <h2>📲 Link para todos</h2>
+      <p class="hint" style="margin-top:0">Es el mismo link para todos. Cada quien elige quién es (ya no lo puede cambiar), escribe su regalo y, cuando hagas el sorteo, ahí mismo gira su ruleta.</p>
+      <div class="row" style="margin-top:10px">
+        <a class="btn wa" id="gl-wa" target="_blank" rel="noopener" href="#">Mandar al grupo</a>
+        <button class="btn ghost small" id="gl-copy">Copiar link</button>
+      </div>
+      <input class="linkbox" id="gl-box" readonly style="display:none">
+    </div>`:""}
+
+    <div class="card">
+      <h2>🎲 Sorteo</h2>
+      ${!drawn?`
+        <p class="hint" style="margin-top:0">Hazlo cuando quieras. Si alguien pone su regalo después, igual le sale a quien le tocó.</p>
+        <button class="btn gold block" id="go" ${n<3?"disabled":""} style="margin-top:8px">🎲 Hacer el sorteo ${n<3?`(faltan ${3-n})`:""}</button>`
+      :`
+        <div class="ok" style="margin-top:0" id="spuncount">✅ Sorteo hecho</div>
+        ${changed?`<div class="confirm">Cambiaste participantes después del sorteo. Usa <b>"Repetir el sorteo"</b> abajo para que entren todos.</div>`:""}
+        ${S.spoil?`<div class="spoiler">${dl.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}<span class="pphone" style="width:100%;font-weight:600">🎁 ${esc(wishOf(p.r)||"Sin regalo todavía")}</span></div>`).join("")}</div>
+          <button class="linkbtn" id="hide">Ocultar</button>`
+        :`<button class="btn ghost block" id="spoil" style="margin-top:8px">👀 Ver quién le tocó a quién</button>`}
+        <a class="btn wa block" style="margin-top:10px;padding:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `📋 ${S.title} — resultados:\n`+dl.map(p=>`• ${p.g} → ${p.r}${wishOf(p.r)?` (🎁 ${wishOf(p.r)})`:""}`).join("\n"))}">Mandarme la lista a mi WhatsApp</a>`}
+    </div>
+
+    <div class="card">
+      <h2>⚙️ Reiniciar</h2>
+      ${drawn?`<button class="btn ghost block" id="redraw">🔄 Repetir el sorteo</button><p class="hint">Se queda quién es quién y sus regalos; solo cambia a quién le toca. Todos vuelven a girar.</p>`:""}
+      <button class="btn ghost block" id="reset" style="margin-top:8px">♻️ Reiniciar todo el intercambio</button>
+      <p class="hint">Borra quién eligió cada nombre, los regalos y el sorteo. El link sigue siendo el mismo y todos vuelven a elegir quiénes son.</p>
+      <div id="confirm-box"></div>
+      <p class="hint" style="margin-top:14px">🔑 <a class="linkbtn" style="font-size:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `🔑 Mi link de organizador del ${S.title} (no lo compartas):\n${adminLink()}`)}">Mandarme mi link de organizador</a> — para abrir esta pantalla desde otro celular.</p>
+    </div>
   `;
-  ["title","org","orgPhone","budget","date"].forEach(k=>{
-    $("#f-"+k).addEventListener("input",e=>{ S[k]=e.target.value; save(); if(k==="org") toggleAddMe(); });
-  });
+  // datos
+  ["title","org","orgPhone","budget","date"].forEach(k=>$("#f-"+k).addEventListener("input",e=>{ S[k]=e.target.value; pushCfg(); refreshLinks(); }));
+  const paintAddMe=()=>{ const w=$("#addme-wrap"); if(!w) return;
+    w.innerHTML = S.org.trim() && !S.people.some(p=>keyOf(p.name)===keyOf(S.org)) ? `<button class="linkbtn" id="add-me">+ Agregarme a mí (${esc(S.org.trim())})</button>`:"";
+    const me=$("#add-me"); if(me) me.onclick=()=>{ S.people.push({name:S.org.trim(),phone:S.orgPhone}); pushCfg(true); renderOrg(); }; };
+  $("#f-org").addEventListener("input",paintAddMe); paintAddMe();
+  // participantes
   const add=()=>{
-    const name=$("#p-name").value.trim(), phone=$("#p-phone").value.trim();
+    const name=$("#p-name").value.trim().replace(/\s+/g," "), phone=$("#p-phone").value.trim();
     if(!name){ $("#p-err").textContent="Escribe un nombre."; return; }
-    if(S.people.some(p=>p.name.toLowerCase()===name.toLowerCase())){ $("#p-err").textContent="Ese nombre ya está. Ponle apellido o apodo."; return; }
-    S.people.push({name,phone}); save(); renderSetup(); $("#p-name").focus();
+    if(S.people.some(p=>keyOf(p.name)===keyOf(name))){ $("#p-err").textContent="Ese nombre ya está. Ponle apellido o apodo."; return; }
+    S.people.push({name,phone}); pushCfg(true); renderOrg(); $("#p-name").focus();
   };
   $("#p-add").onclick=add;
   $("#p-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#p-phone").focus(); }});
   $("#p-phone").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); }});
-  document.querySelectorAll("[data-wish]").forEach(inp=>inp.addEventListener("input",()=>{ S.people[+inp.dataset.wish].wish=inp.value; save(); }));
-  const refreshWL=()=>{ const a=$("#wl-wa"); if(a){ a.href=waLink("", wishMsg()); $("#wl-err").textContent=phoneNorm(S.orgPhone)?"":"Primero pon tu WhatsApp arriba para que te lleguen los regalos."; } };
-  ["title","org","orgPhone","budget","date"].forEach(k=>$("#f-"+k).addEventListener("input",refreshWL));
-  const wc=$("#wl-copy"); if(wc) wc.onclick=async()=>{ try{ await navigator.clipboard.writeText(wishLink()); wc.textContent="¡Copiado!"; }catch(e){ const b=$("#wl-box"); b.style.display="block"; b.value=wishLink(); b.select(); wc.textContent="Cópialo ↓"; } };
-  const pb=$("#parse"); if(pb) pb.onclick=()=>{
-    const r=parseWishes($("#paste").value);
-    if(!r.found.length && !r.unknown.length){ $("#paste-msg").innerHTML=`<div class="err">No encontré regalos en lo que pegaste. Copia el mensaje completo de WhatsApp.</div>`; return; }
-    save(); renderSetup();
-    $("#paste-msg").innerHTML=(r.found.length?`<div class="ok">✓ Regalo agregado: ${r.found.map(esc).join(", ")}</div>`:"")+(r.unknown.length?`<div class="err">No encontré en la lista a: ${r.unknown.map(esc).join(", ")}</div>`:"");
-    $("#paste-msg").scrollIntoView({block:"center"});
-  };
-  document.querySelectorAll("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); save(); renderSetup(); });
-  const me=$("#add-me"); if(me) me.onclick=()=>{ S.people.push({name:S.org.trim(),phone:S.orgPhone}); save(); renderSetup(); };
-  $("#go").onclick=startDraw;
-  const br=$("#back-res"); if(br) br.onclick=renderResults;
-}
-function toggleAddMe(){ /* se actualiza al volver a pintar */ }
+  $$("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); pushCfg(true); renderOrg(); });
+  $$("[data-wish]").forEach(inp=>inp.addEventListener("input",()=>pushWish(S.people[+inp.dataset.wish].name, inp.value)));
 
-function startDraw(){
-  if(!S.org.trim()){ S.org="El organizador"; }
+  // link
+  const gc=$("#gl-copy"); if(gc) gc.onclick=async()=>{ try{ await navigator.clipboard.writeText(groupLink()); gc.textContent="¡Copiado!"; }catch(e){ const b=$("#gl-box"); b.style.display="block"; b.value=groupLink(); b.select(); gc.textContent="Cópialo ↓"; } };
+  refreshLinks();
+  // sorteo
+  const go=$("#go"); if(go) go.onclick=startDraw;
+  const sp=$("#spoil"); if(sp) sp.onclick=()=>{ S.spoil=true; save(); renderOrg(); };
+  const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderOrg(); };
+  // reiniciar
+  const ask=(msg,label,fn)=>{ $("#confirm-box").innerHTML=`<div class="confirm"><b>${msg}</b><div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes">${label}</button></div></div>`;
+    $("#no").onclick=()=>$("#confirm-box").innerHTML=""; $("#yes").onclick=fn; $("#confirm-box").scrollIntoView({block:"center"}); };
+  const rd=$("#redraw"); if(rd) rd.onclick=()=>ask("¿Repetir el sorteo? A todos les puede tocar otra persona y tienen que volver a girar.","Sí, repetir",async()=>{ await dbDel(`${S.ev}/spun`).catch(()=>{}); startDraw(); });
+  $("#reset").onclick=()=>ask("¿Reiniciar todo? Se borran los nombres elegidos, los regalos y el sorteo.","Sí, reiniciar",async()=>{
+    try{ await Promise.all(["claims","wishes","spun","draw"].map(x=>dbDel(`${S.ev}/${x}`))); }catch(e){}
+    LIVE={claims:{},wishes:{},spun:{},draw:null}; S.spoil=false; save(); renderOrg(); });
+  paintStatus();
+}
+function refreshLinks(){
+  const a=$("#gl-wa"); if(a) a.href=waLink("", `🎁 ¡Hola! Ya está el ${S.title}. Entra aquí, elige quién eres y escribe qué regalo quieres${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}. Cuando se haga el sorteo, en este mismo link giras tu ruleta para ver a quién le regalas 🎰\n${groupLink()}`);
+}
+function paintStatus(){
+  const net=$("#net"); if(net) net.textContent = NET ? "" : "⚠️ Sin conexión a la base de datos. Revisa tu internet.";
+  let cl=0,wi=0,sp=0;
+  S.people.forEach((p,i)=>{
+    const k=keyOf(p.name), c=!!LIVE.claims[k], w=!!wishOf(p.name), s=!!LIVE.spun[k]; cl+=c; wi+=w; sp+=s;
+    const el=$("#st-"+i); if(el) el.innerHTML = `${c?`<span class="st on">🔒 Ya entró</span>`:`<span class="st">⏳ No ha entrado</span>`}${w?`<span class="st on">🎁 Regalo</span>`:""}${s?`<span class="st on">🎰 Ya giró</span>`:""}${c?`<button class="st free" data-free="${k}">Liberar</button>`:""}`;
+    const inp=$(`[data-wish="${i}"]`); if(inp && inp!==document.activeElement && !wishT[p.name+"_typing"]) inp.value=wishOf(p.name);
+  });
+  const ct=$("#counts"); if(ct && S.people.length) ct.textContent=`${cl} de ${S.people.length} ya entraron · ${wi} ya pusieron su regalo`;
+  const sc=$("#spuncount"); if(sc) sc.textContent=`✅ Sorteo hecho · ${sp} de ${drawList().length} ya giraron su ruleta`;
+}
+async function refreshOrg(){ try{ await pull(); NET=true; }catch(e){ NET=false; } paintStatus(); }
+
+async function startDraw(){
   const names=S.people.map(p=>p.name);
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><div class="drum" id="drum"></div><p>Revolviendo papelitos…</p></div>`;
-  let t=0; const iv=setInterval(()=>{ $("#drum").textContent=names[Math.floor(Math.random()*names.length)]; t++; },90);
-  setTimeout(()=>{ clearInterval(iv); S.draw=doDraw(names); S.sent={}; S.spoil=false; save(); confetti(); renderResults(); },1900);
+  const iv=setInterval(()=>{ $("#drum").textContent=names[Math.floor(Math.random()*names.length)]; },90);
+  const d=doDraw(names), map={}; d.forEach(x=>map[keyOf(x.g)]=encode([x.g,x.r]));
+  let ok=true;
+  await Promise.all([ pushCfg(true), dbPut(`${S.ev}/draw`,map), dbDel(`${S.ev}/spun`), new Promise(r=>setTimeout(r,1900)) ]).catch(()=>{ ok=false; });
+  clearInterval(iv);
+  if(ok){ LIVE.draw=map; LIVE.spun={}; S.spoil=false; save(); confetti(); }
+  renderOrg();
+  if(!ok){ NET=false; paintStatus(); }
 }
 
-function renderResults(){
-  const d=S.draw; if(!d){ renderSetup(); return; }
-  const sentN=Object.keys(S.sent||{}).length;
-  const phoneOf=n=>(S.people.find(p=>p.name===n)||{}).phone||"";
-  $("#app").innerHTML=`
-    <header><span class="tag">✅ Sorteo listo</span><h1>${esc(S.title)}</h1><p>Mándale a cada persona su link: le sale una ruleta y al picarle le toca alguien. Nadie se repite ni le toca a sí mismo.</p></header>
-    <div class="card">
-      <h2>📲 Enviar regalos <span class="count">${sentN}/${d.length}</span></h2>
-      <ul class="people res">${d.map((p,i)=>`
-        <li><span class="av" style="background:${colorFor(p.g)}">${esc(initials(p.g))}</span>
-          <div class="grow"><div class="pname">${esc(p.g)}</div>${S.sent[p.g]?`<div class="sent">✓ Enviado</div>`:`<div class="pphone">${phoneOf(p.g)?esc(phoneOf(p.g)):"Elige el contacto en WhatsApp"}</div>`}</div>
-          <div class="acts">
-            <a class="btn wa" target="_blank" rel="noopener" data-send="${i}" href="${waLink(phoneOf(p.g), `🎁 ¡Hola ${p.g}! Ya se hizo el sorteo del ${S.title}. Entra aquí y pícale a la ruleta para ver a quién te tocó (es secreto 🤫):\n${linkFor(p)}`)}">WhatsApp</a>
-            <button class="btn ghost small" data-copy="${i}">Copiar</button>
-          </div>
-          <input class="linkbox" id="lb-${i}" readonly style="display:none">
-        </li>`).join("")}</ul>
-    </div>
-    <div class="card">
-      <h2>🤫 Resultados</h2>
-      <p class="hint" style="margin-top:0">${S.people.some(p=>p.name===S.org)?"Ojo: tú también participas, si los ves se te arruina la sorpresa.":"Solo tú puedes verlos desde aquí."}</p>
-      ${S.spoil?`<div class="spoiler">${d.map(p=>`<div class="pair" style="flex-wrap:wrap">${esc(p.g)} <span class="arrow">→</span> ${esc(p.r)}${wishOf(p.r)?`<span class="pphone" style="width:100%;font-weight:600">🎁 ${esc(wishOf(p.r))}</span>`:""}</div>`).join("")}</div>
-        <button class="linkbtn" id="hide">Ocultar</button>`
-      :`<button class="btn ghost block" id="spoil" style="margin-top:6px">👀 Ver quién le tocó a quién</button>`}
-      <a class="btn wa block" style="margin-top:10px;padding:13px" target="_blank" rel="noopener" href="${waLink(S.orgPhone, `📋 ${S.title} — resultados del sorteo:\n`+d.map(p=>`• ${p.g} → ${p.r}${wishOf(p.r)?` (🎁 ${wishOf(p.r)})`:""}`).join("\n"))}">Mandarme la lista a mi WhatsApp</a>
-      ${phoneNorm(S.orgPhone)?"":`<p class="hint">Pon tu WhatsApp en los datos para que te llegue directo.</p>`}
-    </div>
-    <div class="row">
-      <button class="btn ghost" id="edit" style="color:var(--cream);border-color:rgba(255,255,255,.3)">✏️ Editar</button>
-      <button class="btn ghost" id="redo" style="color:var(--cream);border-color:rgba(255,255,255,.3)">🎲 Volver a sortear</button>
-    </div>
-    <div id="redo-box"></div>
-    <p class="foot">Los links ya traen el resultado: aunque cierres esta página, siguen funcionando.<br>Si alguien te manda su regalo después del sorteo, agrégalo en ✏️ Editar y vuelve a mandar el link a quien le tocó esa persona: el resultado no cambia, solo ya le sale el regalo.</p>
-  `;
-  document.querySelectorAll("[data-send]").forEach(a=>a.addEventListener("click",()=>{ const p=d[+a.dataset.send]; S.sent[p.g]=1; save(); setTimeout(renderResults,400); }));
-  document.querySelectorAll("[data-copy]").forEach(b=>b.onclick=async()=>{
-    const i=+b.dataset.copy, url=linkFor(d[i]);
-    try{ await navigator.clipboard.writeText(url); b.textContent="¡Copiado!"; S.sent[d[i].g]=1; save(); }
-    catch(e){ const lb=$("#lb-"+i); lb.style.display="block"; lb.value=url; lb.select(); b.textContent="Cópialo ↓"; }
+async function openAdmin(ev){
+  $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><p>Abriendo tu intercambio…</p></div>`;
+  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||""}))}); save(); } }catch(e){}
+  history.replaceState(null,"",location.pathname); startOrg();
+}
+async function startOrg(){ await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
+
+// ================== Participante (link único) ==================
+let PIV=null;
+function shell(inner){ $("#app").innerHTML=inner; }
+function head(c,h1,sub){ return `<div class="stage"><span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(c.title||"Intercambio")}</span><h1>${h1}</h1>${sub?`<p style="opacity:.85;margin:0">${sub}</p>`:""}
+  ${(c.budget||c.date)?`<div class="meta" style="margin-top:12px">${c.budget?`<span class="chip" style="color:var(--ink)">💰 Presupuesto: ${esc(c.budget)}</span>`:""}${c.date?`<span class="chip" style="color:var(--ink)">📅 ${esc(c.date)}</span>`:""}</div>`:""}</div>`; }
+
+async function renderJoin(ev){
+  clearInterval(PIV);
+  shell(`<div class="tombola"><div class="spin"></div><p>Cargando…</p></div>`);
+  let d; try{ d=await dbGet(ev); }catch(e){ shell(`<div class="stage"><h1>Sin conexión 📶</h1><div class="card" style="color:var(--ink)">No pude cargar el intercambio. Revisa tu internet.<br><br><button class="btn red block" onclick="route()">Intentar otra vez</button></div></div>`); return; }
+  if(!d||!d.config||!(d.config.people||[]).length){ shell(`<div class="stage"><h1>Todavía no está listo 🎁</h1><div class="card" style="color:var(--ink)">El organizador todavía no agrega a los participantes. Intenta más tarde.</div></div>`); return; }
+  const mine=lsGet("me-"+ev);
+  if(mine){ const cl=(d.claims||{})[mine]; if(cl && cl.dev===DEV) return renderMe(ev,mine,d); lsDel("me-"+ev); }
+  renderChoose(ev,d);
+}
+
+function renderChoose(ev,d){
+  const c=d.config, claims=d.claims||{};
+  shell(head(c,"¿Quién eres? 👀","Elige tu nombre. Ojo: ya no lo vas a poder cambiar.")+`
+    <div class="card" style="margin-top:18px">
+      <div class="namechips">${c.people.map((p,i)=>{ const t=!!claims[keyOf(p.name)]; return `<button class="namechip ${t?"taken":""}" data-n="${i}" ${t?"disabled":""}>${t?"🔒 ":""}${esc(p.name)}</button>`; }).join("")}</div>
+      <p class="hint" style="text-align:center">Los nombres con 🔒 ya los eligió alguien.</p>
+      <div id="cbox"></div>
+    </div>`);
+  $$("[data-n]").forEach(b=>b.onclick=()=>{
+    const p=c.people[+b.dataset.n]; $$(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on");
+    $("#cbox").innerHTML=`<div class="confirm" style="background:#fff;border-color:var(--gold)"><b>¿Seguro que eres ${esc(p.name)}?</b><br>Una vez que elijas, en este celular ya no podrás cambiarlo.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="cno">No</button><button class="btn red small" id="cyes">Sí, soy ${esc(p.name)}</button></div><div class="err" id="cerr"></div></div>`;
+    $("#cno").onclick=()=>{ $("#cbox").innerHTML=""; b.classList.remove("on"); };
+    $("#cyes").onclick=async()=>{
+      const k=keyOf(p.name), y=$("#cyes"); y.disabled=true; y.textContent="Un momento…";
+      try{
+        const cur=await dbGet(`${ev}/claims/${k}`);
+        if(cur && cur.dev!==DEV){ $("#cerr").textContent=`Alguien ya eligió ese nombre. Si de verdad eres tú, pídele a ${c.org} que lo libere.`; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; return; }
+        await dbPut(`${ev}/claims/${k}`,{name:p.name,dev:DEV,t:Date.now()});
+        lsSet("me-"+ev,k); renderJoin(ev);
+      }catch(e){ $("#cerr").textContent="No se pudo guardar. Revisa tu internet."; y.disabled=false; y.textContent=`Sí, soy ${p.name}`; }
+    };
+    $("#cbox").scrollIntoView({block:"center",behavior:"smooth"});
   });
-  const sp=$("#spoil"); if(sp) sp.onclick=()=>{ S.spoil=true; save(); renderResults(); };
-  const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderResults(); };
-  $("#edit").onclick=renderSetup;
-  $("#redo").onclick=()=>{
-    $("#redo-box").innerHTML=`<div class="confirm"><b>¿Sortear otra vez?</b><br>Si ya mandaste links, esas personas tendrían un resultado viejo. Tendrías que mandarle el nuevo link a todos.<div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes">Sí, sortear</button></div></div>`;
-    $("#no").onclick=()=>$("#redo-box").innerHTML="";
-    $("#yes").onclick=startDraw;
-  };
 }
 
-// ===== Vista del participante: ruleta =====
-function renderParticipant(data){
-  const [v,g,r,org,orgPhone,budget,date,title,all,wish]=data;
-  let names=(all||[]).filter(n=>n!==g); if(!names.includes(r)) names.push(r);
+function renderMe(ev,k,d){
+  const c=d.config, me=(c.people.find(p=>keyOf(p.name)===k)||(d.claims[k]||{})).name||"tú";
+  const myWish=((d.wishes||{})[k]||{}).wish||"";
+  const dr=d.draw||null, myDraw=dr&&dr[k]?decode(dr[k]):null, spun=!!(d.spun||{})[k];
+  shell(head(c,`¡Hola, ${esc(me)}! 👋`,"")+`
+    <div class="card" style="margin-top:18px" id="wcard">
+      <h2>🎁 Tu regalo</h2>
+      <div id="wview" style="${myWish?"":"display:none"}"><div class="giftwish" style="margin-top:0"><b>Pediste</b><div id="wtxt">${esc(myWish)}</div></div><button class="linkbtn" id="wedit">Cambiar mi regalo</button></div>
+      <div id="wform" style="${myWish?"display:none":""}">
+        <textarea id="w" maxlength="300" placeholder="Ej. Una sudadera talla M color negro, o unos audífonos">${esc(myWish)}</textarea>
+        <p class="hint">${c.budget?`Pide algo de hasta <b>${esc(c.budget)}</b>. `:""}Puedes poner varias opciones, talla, color o tienda.</p>
+        <button class="btn red block" id="wsave" style="margin-top:8px">Guardar mi regalo</button>
+        <div class="err" id="werr"></div>
+      </div>
+    </div>
+    <div class="card" id="rcard">
+      <h2>🎰 Tu ruleta</h2>
+      <div id="rbody"></div>
+    </div>
+    <p class="foot">Entraste como ${esc(me)}. Si no eres tú, pídele a ${esc(c.org)} que te libere.</p>`);
+  $("#wedit").onclick=()=>{ $("#wview").style.display="none"; $("#wform").style.display=""; $("#w").focus(); };
+  $("#wsave").onclick=async()=>{
+    const w=$("#w").value.trim(), b=$("#wsave"); if(!w){ $("#werr").textContent="Escribe qué regalo quieres."; return; }
+    b.disabled=true; b.textContent="Guardando…";
+    try{ await dbPut(`${ev}/wishes/${k}`,{name:me,wish:w.slice(0,300),t:Date.now()}); $("#wtxt").textContent=w; $("#wform").style.display="none"; $("#wview").style.display=""; $("#werr").textContent=""; if(!myWish) confetti(); }
+    catch(e){ $("#werr").textContent="No se pudo guardar. Revisa tu internet."; }
+    b.disabled=false; b.textContent="Guardar mi regalo";
+  };
+  const rb=$("#rbody");
+  if(!dr){
+    rb.innerHTML=`<p style="margin:0">⏳ Todavía no se hace el sorteo. Cuando ${esc(c.org)} lo haga, aquí te va a salir tu ruleta.</p><p class="hint">Esta pantalla se actualiza sola.</p>`;
+    PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
+    return;
+  }
+  if(!myDraw){ rb.innerHTML=`<p style="margin:0">No estás en este sorteo. Avísale a ${esc(c.org)} para que lo repita.</p>`; return; }
+  const r=myDraw[1];
+  const result=()=>`
+    <div class="lbl" style="text-align:center">Te tocó darle regalo a</div>
+    <div class="who" style="text-align:center">${esc(r)}</div>
+    <div class="giftwish"><b>🎁 Lo que quiere</b><div id="gw">${esc(((d.wishes||{})[keyOf(r)]||{}).wish||"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉")}</div></div>
+    <p class="secret" style="text-align:center">🤫 Es secreto, no le digas a nadie.</p>
+    ${c.orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(c.orgPhone, `✅ Ya giré la ruleta del ${c.title} — ${me}`)}">Avisarle a ${esc(c.org)} que ya me tocó</a>`:""}`;
+  if(spun){ rb.innerHTML=result(); return; }
+  const names=c.people.map(p=>p.name).filter(n=>n!==me); if(!names.includes(r)) names.push(r);
+  rb.innerHTML=`<div class="wheelwrap"><div class="pointer"></div><canvas id="wheel"></canvas><div class="hub">🎁</div></div>
+    <button class="btn red block" id="spin" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>`;
+  mountWheel(names, r, async()=>{ try{ await dbPut(`${ev}/spun/${k}`,Date.now()); }catch(e){}
+    confetti(); rb.innerHTML=`<div class="reveal show">${result()}</div>`; $("#rcard").scrollIntoView({block:"start",behavior:"smooth"}); });
+}
+
+function mountWheel(names, r, onDone){
   for(let i=names.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [names[i],names[j]]=[names[j],names[i]]; }
   const target=names.indexOf(r);
-  const spunKey="spun-"+location.hash;
-  let already=false; try{ already=localStorage.getItem(spunKey)==="1"; }catch(e){}
-  $("#app").innerHTML=`
-    <div class="stage">
-      <span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(title||"Intercambio")}</span>
-      <h1>¡Hola, ${esc(g)}! 👋</h1>
-      <p style="opacity:.85;margin:0">${esc(org||"El organizador")} te invitó al intercambio. Pícale a la ruleta para ver a quién le das regalo.</p>
-      <div class="wheelwrap"><div class="pointer"></div><canvas id="wheel"></canvas><div class="hub">🎁</div></div>
-      <button class="btn red block" id="spin" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>
-      <div class="reveal" id="rev" style="margin-top:16px">
-        <div class="card">
-          <div class="lbl">Te tocó darle regalo a</div>
-          <div class="who">${esc(r)}</div>
-          ${(budget||date)?`<div class="meta">${budget?`<span class="chip">💰 ${esc(budget)}</span>`:""}${date?`<span class="chip">📅 ${esc(date)}</span>`:""}</div>`:""}
-          <div class="giftwish"><b>🎁 Lo que quiere</b><div>${wish?esc(wish):"No dijo qué quiere… ¡sorpréndele!"}</div></div>
-          <p class="secret">🤫 Es secreto, no le digas a nadie.</p>
-          ${orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(orgPhone, `✅ Ya giré la ruleta del ${title||"intercambio"} — ${g}`)}">Avisarle a ${esc(org||"el organizador")} que ya me tocó</a>`:""}
-        </div>
-      </div>
-    </div>`;
   const cv=$("#wheel"), ctx=cv.getContext("2d"), dpr=Math.max(1,devicePixelRatio||1);
-  const size=Math.min(320, innerWidth-40); cv.style.width=cv.style.height=size+"px"; cv.width=cv.height=size*dpr;
+  const size=Math.min(300, innerWidth-72); cv.style.width=cv.style.height=size+"px"; cv.width=cv.height=size*dpr;
   const n=names.length, seg=2*Math.PI/n, R=size*dpr/2;
   const segCols=["#c8202f","#1f8a52","#e9b44c","#fff8ec","#2f6db5","#a3141f","#14523e","#c98f22"];
   function draw(rot){
@@ -372,66 +453,31 @@ function renderParticipant(data){
       ctx.fillStyle=col; ctx.fill(); ctx.strokeStyle="rgba(0,0,0,.18)"; ctx.lineWidth=2*dpr; ctx.stroke();
       ctx.save(); ctx.rotate(a0+seg/2); ctx.textAlign="right"; ctx.textBaseline="middle";
       ctx.fillStyle=(col==="#fff8ec"||col==="#e9b44c")?"#2a1d14":"#fff";
-      const fs=Math.max(11, Math.min(18, 260/n))*dpr; ctx.font=`800 ${fs}px Nunito, sans-serif`;
+      const fs=Math.max(10, Math.min(18, 240/n))*dpr; ctx.font=`800 ${fs}px Nunito, sans-serif`;
       let t=names[i]; if(t.length>13) t=t.slice(0,12)+"…";
-      ctx.fillText(t, R-16*dpr, 0); ctx.restore();
+      ctx.fillText(t, R-14*dpr, 0); ctx.restore();
     }
     ctx.beginPath(); ctx.arc(0,0,R-3*dpr,0,2*Math.PI); ctx.lineWidth=6*dpr; ctx.strokeStyle="#e9b44c"; ctx.stroke();
     ctx.restore();
   }
-  // ángulo final: el centro del segmento ganador queda bajo el puntero (arriba)
-  const jitter=(Math.random()-.5)*seg*.6;
-  const finalRot=-Math.PI/2-(target+.5)*seg+jitter;
+  const jitter=(Math.random()-.5)*seg*.6, finalRot=-Math.PI/2-(target+.5)*seg+jitter;
   const norm=x=>((x%(2*Math.PI))+2*Math.PI)%(2*Math.PI);
-  const reveal=()=>{ $("#rev").classList.add("show"); $("#spin").style.display="none"; try{localStorage.setItem(spunKey,"1")}catch(e){} };
-  if(already){ draw(finalRot); reveal(); $("#rev .lbl").textContent="Ya giraste la ruleta — te tocó"; return; }
   draw(Math.random()*2*Math.PI);
   $("#spin").onclick=()=>{
     const btn=$("#spin"); btn.disabled=true; btn.textContent="Girando…";
-    const start=performance.now(), dur=5200, from=Math.random()*2*Math.PI;
-    const to=from+ (2*Math.PI*7) + norm(finalRot-from);
-    let lastSeg=-1;
+    const start=performance.now(), dur=5200, from=Math.random()*2*Math.PI, to=from+2*Math.PI*7+norm(finalRot-from);
+    let last=-1;
     (function frame(now){
-      const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,4), rot=from+(to-from)*e;
-      draw(rot);
-      const cur=Math.floor(norm(-Math.PI/2-rot)/seg);
-      if(cur!==lastSeg){ lastSeg=cur; if(navigator.vibrate) try{navigator.vibrate(8)}catch(_){} }
-      if(t<1) requestAnimationFrame(frame); else { setTimeout(()=>{ confetti(); reveal(); },250); }
+      const t=Math.min(1,(now-start)/dur), e=1-Math.pow(1-t,4), rot=from+(to-from)*e; draw(rot);
+      const cur=Math.floor(norm(-Math.PI/2-rot)/seg); if(cur!==last){ last=cur; if(navigator.vibrate) try{navigator.vibrate(8)}catch(_){} }
+      if(t<1) requestAnimationFrame(frame); else setTimeout(onDone,450);
     })(start);
   };
 }
 
-function renderWish(data){
-  const [v,org,orgPhone,title,names,budget,date]=data; let who="";
-  $("#app").innerHTML=`
-    <div class="stage">
-      <span class="tag" style="color:var(--gold);font-weight:800;letter-spacing:.14em;font-size:12px;text-transform:uppercase">${esc(title||"Intercambio")}</span>
-      <h1>¿Qué regalo quieres? 🎁</h1>
-      <p style="opacity:.85;margin:0">Le va a salir a quien te toque en el sorteo.</p>
-      ${(budget||date)?`<div class="meta" style="margin-top:14px">${budget?`<span class="chip" style="color:var(--ink)">💰 Presupuesto: ${esc(budget)}</span>`:""}${date?`<span class="chip" style="color:var(--ink)">📅 ${esc(date)}</span>`:""}</div>`:""}
-    </div>
-    <div class="card" style="margin-top:18px">
-      <h2>1. ¿Quién eres?</h2>
-      <div class="namechips">${(names||[]).map((n,i)=>`<button class="namechip" data-n="${i}">${esc(n)}</button>`).join("")}</div>
-      <h2 style="margin-top:14px">2. ¿Qué te gustaría?</h2>
-      <textarea id="w" maxlength="300" placeholder="Ej. Una sudadera talla M color negro, o unos audífonos"></textarea>
-      <p class="hint">${budget?`Pide algo de hasta <b>${esc(budget)}</b>. `:""}Puedes poner varias opciones, talla, color o tienda.</p>
-      <a class="btn wa block" id="send" style="padding:14px;margin-top:12px;font-size:16px" target="_blank" rel="noopener" href="#">Mandárselo a ${esc(org)} por WhatsApp</a>
-      <div class="err" id="werr"></div>
-      <p class="hint" style="text-align:center">Se abre WhatsApp con tu mensaje listo, solo dale enviar.</p>
-    </div>`;
-  const send=$("#send");
-  const upd=()=>{ const w=$("#w").value.trim(); send.href = (who&&w) ? waLink(orgPhone, `Regalo que quiero — ${who}:\n${w}\n🎄 ${title}`) : "#"; };
-  document.querySelectorAll("[data-n]").forEach(b=>b.onclick=()=>{ document.querySelectorAll(".namechip").forEach(x=>x.classList.remove("on")); b.classList.add("on"); who=names[+b.dataset.n]; $("#werr").textContent=""; upd(); });
-  $("#w").addEventListener("input",upd);
-  send.addEventListener("click",e=>{ const w=$("#w").value.trim(); if(!who||!w){ e.preventDefault(); $("#werr").textContent=!who?"Elige tu nombre.":"Escribe qué regalo quieres."; } });
-}
+function renderBad(){ shell(`<div class="stage"><h1>Ups 🎁</h1><div class="card" style="color:var(--ink)">Este link no se pudo abrir. Pídele al organizador que te lo vuelva a mandar.</div></div>`); }
 
-function renderBad(){
-  $("#app").innerHTML=`<div class="stage"><h1>Ups 🎁</h1><div class="card" style="color:var(--ink)">Este link no se pudo abrir. Pídele al organizador que te lo vuelva a mandar.</div></div>`;
-}
-
-// ===== Confeti =====
+// ================== Confeti ==================
 function confetti(){
   const c=$("#cf"), x=c.getContext("2d"); c.width=innerWidth; c.height=innerHeight;
   const cols=["#c8202f","#e9b44c","#1f8a52","#fff8ec","#2f6db5"];
@@ -439,12 +485,17 @@ function confetti(){
   let f=0; (function step(){ x.clearRect(0,0,c.width,c.height); P.forEach(p=>{ p.vy+=.45; p.vx*=.99; p.x+=p.vx; p.y+=p.vy; p.r+=p.vr; x.save(); x.translate(p.x,p.y); x.rotate(p.r); x.fillStyle=p.c; x.fillRect(-p.s/2,-p.s/3,p.s,p.s*.6); x.restore(); }); if(++f<170) requestAnimationFrame(step); else x.clearRect(0,0,c.width,c.height); })();
 }
 
-// ===== Router =====
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-free]"); if(!b) return; const k=b.dataset.free;
+  b.textContent="Liberando…"; dbDel(`${S.ev}/claims/${k}`).then(()=>{ delete LIVE.claims[k]; paintStatus(); }).catch(()=>{ b.textContent="Error, intenta de nuevo"; }); });
+
+// ================== Router ==================
 function route(){
   const h=location.hash.replace(/^#/,"");
-  if(h){ const d=decode(h); if(d && d[0]===2) renderWish(d); else if(d) renderParticipant(d); else renderBad(); }
-  else if(S.draw && S._view==="res") renderResults();
-  else renderSetup();
+  if(!h) return startOrg();
+  const d=decode(h);
+  if(d && d[0]===4) return renderJoin(d[1]);
+  if(d && d[0]===5) return openAdmin(d[1]);
+  renderBad();
 }
 addEventListener("hashchange",route);
 route();
