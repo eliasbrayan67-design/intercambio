@@ -366,7 +366,13 @@ function renderOrg(){
   $("#p-add").onclick=add;
   $("#p-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); $("#p-phone").focus(); }});
   $("#p-phone").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); add(); }});
-  $$("[data-del]").forEach(b=>b.onclick=()=>{ S.people.splice(+b.dataset.del,1); pushCfg(true); renderOrg(); });
+  $$("[data-del]").forEach(b=>b.onclick=()=>{ const i=+b.dataset.del, p=S.people[i], box=$("#st-"+i); if(!p||!box) return;
+    FREEING=keyOf(p.name);
+    box.innerHTML=`<div class="confirm" style="width:100%;margin-top:4px"><b>¿Quitar a ${esc(p.name)} del intercambio?</b>${drawList().length?"<br>Ya armaste las parejas: tendrías que volver a armarlas.":""}
+      <div class="row" style="margin-top:10px"><button class="btn ghost small" id="del-no">No</button><button class="btn red small" id="del-yes">Sí, quitar</button></div></div>`;
+    $("#del-no").onclick=()=>{ FREEING=null; paintStatus(); };
+    $("#del-yes").onclick=()=>{ FREEING=null; S.people.splice(i,1); pushCfg(true); renderOrg(); };
+  });
   $$("[data-pinon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.pinon].nopin=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-lockon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.lockon].nolock=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-by]").forEach(sel=>sel.addEventListener("change",()=>{ const p=S.people[+sel.dataset.by];
@@ -390,9 +396,16 @@ function renderOrg(){
   const hd=$("#hide"); if(hd) hd.onclick=()=>{ S.spoil=false; save(); renderOrg(); };
   // reiniciar
   const rd=$("#redraw"); if(rd) rd.onclick=()=>ask("¿Volver a armar las parejas? A todos les puede tocar otra persona y tienen que volver a girar.","Sí, repetir",async()=>{ await dbDel(`${S.ev}/spun`).catch(()=>{}); startDraw(); });
-  $("#reset").onclick=()=>ask("¿Reiniciar todo? Se borran los nombres elegidos, los regalos y las parejas.","Sí, reiniciar",async()=>{
+  $("#reset").onclick=()=>{
+    $("#confirm-box").innerHTML=`<div class="confirm"><b>⚠️ ¿Seguro que quieres reiniciar TODO el intercambio?</b><br>Se borran los nombres elegidos, los PIN, los regalos y las parejas. <b>No se puede deshacer.</b><br><br>Para confirmar, escribe <b>REINICIAR</b>:
+      <input id="reset-word" autocomplete="off" autocapitalize="characters" placeholder="REINICIAR" style="margin-top:8px">
+      <div class="row" style="margin-top:10px"><button class="btn ghost small" id="no">Cancelar</button><button class="btn red small" id="yes" disabled>Reiniciar todo</button></div></div>`;
+    const wd=$("#reset-word"), yb=$("#yes"); $("#no").onclick=()=>$("#confirm-box").innerHTML="";
+    wd.addEventListener("input",()=>{ yb.disabled = wd.value.trim().toUpperCase()!=="REINICIAR"; });
+    $("#confirm-box").scrollIntoView({block:"center"});
+    yb.onclick=async()=>{ if(wd.value.trim().toUpperCase()!=="REINICIAR") return; yb.disabled=true; yb.textContent="Reiniciando…";
     try{ await Promise.all(["claims","wishes","spun","draw"].map(x=>dbDel(`${S.ev}/${x}`))); }catch(e){}
-    LIVE={claims:{},wishes:{},spun:{},draw:null}; S.spoil=false; save(); renderOrg(); });
+    LIVE={claims:{},wishes:{},spun:{},draw:null}; S.spoil=false; save(); renderOrg(); }; };
   paintStatus();
 }
 function refreshLinks(){
