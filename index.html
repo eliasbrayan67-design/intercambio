@@ -134,6 +134,9 @@
   .st{font-size:11px;font-weight:800;border-radius:99px;padding:3px 8px;background:#efe6d6;color:var(--muted);border:0;font-family:inherit}
   .st.on{background:#dff3e6;color:var(--ok)}
   .st.free{background:#fde3e5;color:var(--red);cursor:pointer}
+  input.fam{width:auto;flex:1;min-width:0;font-size:13px;font-weight:700;padding:5px 8px;border-width:1.5px;border-radius:10px}
+  .famsum{margin-top:14px;padding:12px;border-radius:14px;background:#fff;border:2px dashed var(--line);font-size:14px}
+  .famrow{padding:4px 0;border-top:1px dashed var(--line);margin-top:4px}
   .opts{display:flex;flex-wrap:wrap;gap:4px 14px}
   .opts input{width:auto;margin:0}
   .bylbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);margin:6px 0 0}
@@ -216,19 +219,22 @@ function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf
 // PIN de 3 números: se guarda solo una huella (no el número) para poder entrar desde otro celular
 function pinHash(ev,k,pin){ let h=0x811c9dc5; const str=`${ev}|${k}|${pin}|${KEY}`; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(16); }
 const pinOk = v => /^\d{3}$/.test(v);
+// Familia de cada persona (si no tiene, usa la de quien elige por ella)
+function famOf(p, people){ const f=(p&&p.fam||"").trim(); if(f) return keyOf(f); const b=effBy(p,people); if(b){ const t=people.find(x=>x.name===b); if(t&&(t.fam||"").trim()) return keyOf(t.fam); } return ""; }
+function famList(){ const m={}; S.people.forEach(p=>{ const f=(p.fam||"").trim(); if(f){ const k=keyOf(f); (m[k]=m[k]||{label:f,names:[]}); } }); S.people.forEach(p=>{ const k=famOf(p,S.people); if(k&&m[k]) m[k].names.push(p.name); }); return Object.values(m); }
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
 // ================== Organizador ==================
 let S = JSON.parse(lsGet(STORE)||lsGet("intercambio-v1")||"null") || {};
 S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false}, S);
-S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||"", nopin:!!p.nopin, nolock:!!p.nolock}));
+S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||"", nopin:!!p.nopin, nolock:!!p.nolock, fam:p.fam||""}));
 if(!S.ev) S.ev=rand();
 function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil})); }
 save();
 let LIVE={claims:{},wishes:{},spun:{},draw:null}, NET=true;
 const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
 const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
-const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin,nolock:!!p.nolock}))});
+const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin,nolock:!!p.nolock,fam:(p.fam||"").trim()}))});
 let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
@@ -261,16 +267,28 @@ function paintWish(i){
 let wishT={}; function pushWish(name,val){ clearTimeout(wishT[name]); wishT[name]=setTimeout(()=>{ const k=keyOf(name); const w=val.trim(); (w?dbPut(`${S.ev}/wishes/${k}`,{name,wish:w.slice(0,800),t:Date.now()}):dbDel(`${S.ev}/wishes/${k}`)).catch(()=>{}); LIVE.wishes[k]=w?{name,wish:w}:undefined; },700); }
 
 function doDraw(names, people){
-  const resp={}; (people||[]).forEach(p=>{ const b=effBy(p,people); if(b) resp[p.name]=b; });
-  let best=null;
-  for(let t=0;t<5000;t++){
-    const a=[...names];
-    for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; }
-    const d=a.map((g,i)=>({g, r:a[(i+1)%a.length]}));   // un solo ciclo: nadie se repite ni se toca a sí mismo
-    if(!best) best=d;
-    if(d.every(x=>resp[x.g]!==x.r)) return d;          // a un niño no le toca su papá/mamá (quien elige por él)
+  people=people||[];
+  const resp={}, fam={};
+  people.forEach(p=>{ const b=effBy(p,people); if(b) resp[p.name]=b; fam[p.name]=famOf(p,people); });
+  const bad=(g,r)=> g===r || resp[g]===r || (fam[g] && fam[g]===fam[r]);   // a nadie le toca: sí mismo, quien elige por él, ni alguien de su familia
+  // Revisión rápida: si una familia tiene más de la mitad, es imposible
+  const cnt={}; names.forEach(n=>{ const f=fam[n]; if(f) cnt[f]=(cnt[f]||0)+1; });
+  if(Object.values(cnt).some(c=>c>names.length/2)) return null;
+  const shuffle=a=>{ for(let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  // 1) Preferido: una sola cadena (A→B→C→…→A)
+  for(let t=0;t<30000;t++){
+    const a=shuffle([...names]); const d=a.map((g,i)=>({g, r:a[(i+1)%a.length]}));
+    if(d.every(x=>!bad(x.g,x.r))) return d;
   }
-  return best;
+  // 2) Si no se puede en una cadena: cualquier reparto válido (todos dan uno y reciben uno)
+  for(let t=0;t<50;t++){
+    const gs=shuffle([...names]), used=new Set(), out=[]; let steps=0;
+    const go=i=>{ if(i===gs.length) return true; if(++steps>20000) return false; const g=gs[i];
+      for(const r of shuffle(names.filter(r=>!used.has(r)&&!bad(g,r)))){ used.add(r); out.push({g,r}); if(go(i+1)) return true; out.pop(); used.delete(r); }
+      return false; };
+    if(go(0)) return out;
+  }
+  return null;   // imposible con estas reglas
 }
 
 function renderOrg(){
@@ -311,9 +329,12 @@ function renderOrg(){
               <option value="">Él/ella mismo(a)</option>
               ${S.people.filter(o=>o!==p && !effBy(o,S.people) && !S.people.some(x=>x!==o && effBy(x,S.people)===p.name && false)).map(o=>`<option value="${esc(o.name)}" ${effBy(p,S.people)===o.name?"selected":""}>${esc(o.name)}</option>`).join("")}
             </select></label>
+          <label class="bylbl">👪 Familia: <input class="fam" list="famlist" data-fam="${i}" value="${esc(p.fam||"")}" placeholder="${effBy(p,S.people)?"La de "+esc(effBy(p,S.people)):"Ej. Calzoncit"}" autocomplete="off"></label>
           <div class="wbox" id="wb-${i}"></div></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
+      <datalist id="famlist">${famList().map(f=>`<option value="${esc(f.label)}">`).join("")}</datalist>
+      ${famSummary()}
       <div class="ok" id="counts"></div>
     </div>
 
@@ -373,6 +394,7 @@ function renderOrg(){
     $("#del-no").onclick=()=>{ FREEING=null; paintStatus(); };
     $("#del-yes").onclick=()=>{ FREEING=null; S.people.splice(i,1); pushCfg(true); renderOrg(); };
   });
+  $$("[data-fam]").forEach(inp=>inp.addEventListener("change",()=>{ S.people[+inp.dataset.fam].fam=inp.value.trim().replace(/\s+/g," "); pushCfg(true); renderOrg(); }));
   $$("[data-pinon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.pinon].nopin=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-lockon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.lockon].nolock=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-by]").forEach(sel=>sel.addEventListener("change",()=>{ const p=S.people[+sel.dataset.by];
@@ -408,6 +430,13 @@ function renderOrg(){
     LIVE={claims:{},wishes:{},spun:{},draw:null}; S.spoil=false; save(); renderOrg(); }; };
   paintStatus();
 }
+function famSummary(){
+  const fl=famList(); if(!fl.length) return `<p class="hint">👪 Pon la misma familia a quienes no se pueden tocar entre sí (papás, hermanos…).</p>`;
+  const n=S.people.length; const big=fl.filter(f=>f.names.length>n/2);
+  return `<div class="famsum"><b>👪 Familias</b> <span class="hint">— a nadie le toca alguien de su misma familia</span>
+    ${fl.map(f=>`<div class="famrow"><b>${esc(f.label)}</b> (${f.names.length}): ${f.names.map(esc).join(", ")}</div>`).join("")}
+    ${big.length?`<div class="err">⚠️ La familia ${esc(big[0].label)} tiene más de la mitad de los participantes: así no se pueden armar las parejas.</div>`:""}</div>`;
+}
 function refreshLinks(){
   const a=$("#gl-wa"); if(a) a.href=waLink("", `🎁 ¡Hola! Ya está el ${S.title}. Entra aquí, elige quién eres y escribe qué regalo quieres${S.budget.trim()?` (presupuesto: ${S.budget.trim()})`:""}. Cuando se activen las ruletas, en este mismo link giras la tuya para ver a quién le regalas 🎰\n${groupLink()}`);
 }
@@ -428,7 +457,8 @@ async function startDraw(){
   const names=S.people.map(p=>p.name);
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><div class="drum" id="drum"></div><p>Revolviendo papelitos…</p></div>`;
   const iv=setInterval(()=>{ $("#drum").textContent=names[Math.floor(Math.random()*names.length)]; },90);
-  const d=doDraw(names,S.people), map={}; d.forEach(x=>map[keyOf(x.g)]=encode([x.g,x.r]));
+  const d=doDraw(names,S.people), map={};
+  if(!d){ clearInterval(iv); renderOrg(); $("#confirm-box").innerHTML=`<div class="confirm"><b>No se pueden armar las parejas.</b><br>Alguna familia tiene demasiados integrantes para que a nadie le toque alguien de su familia. Revisa las familias en Participantes.</div>`; $("#confirm-box").scrollIntoView({block:"center"}); return; } d.forEach(x=>map[keyOf(x.g)]=encode([x.g,x.r]));
   let ok=true;
   await Promise.all([ pushCfg(true), dbPut(`${S.ev}/draw`,map), dbDel(`${S.ev}/spun`), new Promise(r=>setTimeout(r,1900)) ]).catch(()=>{ ok=false; });
   clearInterval(iv);
@@ -439,7 +469,7 @@ async function startDraw(){
 
 async function openAdmin(ev){
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><p>Abriendo tu intercambio…</p></div>`;
-  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||"",nopin:!!p.nopin,nolock:!!p.nolock}))}); save(); } }catch(e){}
+  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||"",nopin:!!p.nopin,nolock:!!p.nolock,fam:p.fam||""}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
 async function startOrg(){ $("#app").classList.add("wide"); if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
