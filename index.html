@@ -136,7 +136,9 @@
   .st.free{background:#fde3e5;color:var(--red);cursor:pointer}
   input.fam{width:auto;flex:1;min-width:0;font-size:13px;font-weight:700;padding:5px 8px;border-width:1.5px;border-radius:10px}
   .famsum{margin-top:14px;padding:12px;border-radius:14px;background:#fff;border:2px dashed var(--line);font-size:14px}
-  .famrow{padding:4px 0;border-top:1px dashed var(--line);margin-top:4px}
+  .famrow{padding:6px 0;border-top:1px dashed var(--line)}
+  .famrow:first-child{border-top:0}
+  .famsel{max-width:70%}
   .opts{display:flex;flex-wrap:wrap;gap:4px 14px}
   .opts input{width:auto;margin:0}
   .bylbl{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--muted);margin:6px 0 0}
@@ -221,20 +223,22 @@ function pinHash(ev,k,pin){ let h=0x811c9dc5; const str=`${ev}|${k}|${pin}|${KEY
 const pinOk = v => /^\d{3}$/.test(v);
 // Familia de cada persona (si no tiene, usa la de quien elige por ella)
 function famOf(p, people){ const f=(p&&p.fam||"").trim(); if(f) return keyOf(f); const b=effBy(p,people); if(b){ const t=people.find(x=>x.name===b); if(t&&(t.fam||"").trim()) return keyOf(t.fam); } return ""; }
-function famList(){ const m={}; S.people.forEach(p=>{ const f=(p.fam||"").trim(); if(f){ const k=keyOf(f); (m[k]=m[k]||{label:f,names:[]}); } }); S.people.forEach(p=>{ const k=famOf(p,S.people); if(k&&m[k]) m[k].names.push(p.name); }); return Object.values(m); }
+function famList(){ return (S.families||[]).map(f=>({label:f,key:keyOf(f),names:S.people.filter(p=>famOf(p,S.people)===keyOf(f)).map(p=>p.name)})); }
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
 // ================== Organizador ==================
 let S = JSON.parse(lsGet(STORE)||lsGet("intercambio-v1")||"null") || {};
-S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false}, S);
+S = Object.assign({ev:null,title:"Intercambio Navideño 2026",org:"",orgPhone:"",budget:"",date:"",people:[],spoil:false,families:[]}, S);
 S.people = (S.people||[]).map(p=>({name:p.name, phone:p.phone||"", by:p.by||"", nopin:!!p.nopin, nolock:!!p.nolock, fam:p.fam||""}));
+S.families=(S.families||[]).filter(Boolean);
+S.people.forEach(p=>{ const f=(p.fam||"").trim(); if(f && !S.families.some(x=>keyOf(x)===keyOf(f))) S.families.push(f); });
 if(!S.ev) S.ev=rand();
-function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil})); }
+function save(){ lsSet(STORE, JSON.stringify({ev:S.ev,title:S.title,org:S.org,orgPhone:S.orgPhone,budget:S.budget,date:S.date,people:S.people,spoil:S.spoil,families:S.families})); }
 save();
 let LIVE={claims:{},wishes:{},spun:{},draw:null}, NET=true;
 const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
 const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
-const cfg = () => ({title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin,nolock:!!p.nolock,fam:(p.fam||"").trim()}))});
+const cfg = () => ({families:S.families.slice(), title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin,nolock:!!p.nolock,fam:(p.fam||"").trim()}))});
 let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
 async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
@@ -311,6 +315,17 @@ function renderOrg(){
     </div>
 
     <div class="card">
+      <h2>👪 Familias <span class="count">${(S.families||[]).length}</span></h2>
+      <p class="hint" style="margin-top:0">Primero da de alta las familias. Luego, en cada persona, elige su familia. A nadie le toca alguien de su misma familia.</p>
+      <div class="add" style="grid-template-columns:1fr auto">
+        <input id="fam-name" placeholder="Ej. Calzoncit, Primos García…" autocomplete="off">
+        <button class="btn red plus" id="fam-add" aria-label="Agregar familia">+</button>
+      </div>
+      <div class="err" id="fam-err"></div>
+      ${famSummary()}
+    </div>
+
+    <div class="card">
       <h2>👥 Participantes <span class="count">${n}</span></h2>
       <div class="add">
         <input id="p-name" placeholder="Nombre" autocomplete="off">
@@ -329,12 +344,14 @@ function renderOrg(){
               <option value="">Él/ella mismo(a)</option>
               ${S.people.filter(o=>o!==p && !effBy(o,S.people) && !S.people.some(x=>x!==o && effBy(x,S.people)===p.name && false)).map(o=>`<option value="${esc(o.name)}" ${effBy(p,S.people)===o.name?"selected":""}>${esc(o.name)}</option>`).join("")}
             </select></label>
-          <label class="bylbl">👪 Familia: <input class="fam" list="famlist" data-fam="${i}" value="${esc(p.fam||"")}" placeholder="${effBy(p,S.people)?"La de "+esc(effBy(p,S.people)):"Ej. Calzoncit"}" autocomplete="off"></label>
+          <label class="bylbl">👪 Familia:
+            <select class="by famsel" data-fam="${i}">
+              <option value="">${effBy(p,S.people)?`Sin familia (usa la de ${esc(effBy(p,S.people))})`:"Sin familia"}</option>
+              ${(S.families||[]).map(f=>`<option value="${esc(f)}" ${keyOf(p.fam||"")===keyOf(f)?"selected":""}>${esc(f)}</option>`).join("")}
+            </select></label>
           <div class="wbox" id="wb-${i}"></div></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
-      <datalist id="famlist">${famList().map(f=>`<option value="${esc(f.label)}">`).join("")}</datalist>
-      ${famSummary()}
       <div class="ok" id="counts"></div>
     </div>
 
@@ -394,7 +411,17 @@ function renderOrg(){
     $("#del-no").onclick=()=>{ FREEING=null; paintStatus(); };
     $("#del-yes").onclick=()=>{ FREEING=null; S.people.splice(i,1); pushCfg(true); renderOrg(); };
   });
-  $$("[data-fam]").forEach(inp=>inp.addEventListener("change",()=>{ S.people[+inp.dataset.fam].fam=inp.value.trim().replace(/\s+/g," "); pushCfg(true); renderOrg(); }));
+  $$("[data-fam]").forEach(sel=>sel.addEventListener("change",()=>{ S.people[+sel.dataset.fam].fam=sel.value; pushCfg(true); renderOrg(); }));
+  const addFam=()=>{ const v=$("#fam-name").value.trim().replace(/\s+/g," ");
+    if(!v){ $("#fam-err").textContent="Escribe el nombre de la familia."; return; }
+    if(S.families.some(f=>keyOf(f)===keyOf(v))){ $("#fam-err").textContent="Esa familia ya existe."; return; }
+    S.families.push(v); pushCfg(true); renderOrg(); $("#fam-name").focus(); };
+  $("#fam-add").onclick=addFam; $("#fam-name").addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); addFam(); }});
+  $$("[data-famdel]").forEach(b=>b.onclick=()=>{ const f=S.families[+b.dataset.famdel]; const row=b.closest(".famrow");
+    row.innerHTML=`<div class="confirm" style="margin:4px 0"><b>¿Borrar la familia ${esc(f)}?</b><br>Sus integrantes quedan sin familia.<div class="row" style="margin-top:8px"><button class="btn ghost small" data-famno>No</button><button class="btn red small" data-famyes>Sí, borrar</button></div></div>`;
+    row.querySelector("[data-famno]").onclick=()=>renderOrg();
+    row.querySelector("[data-famyes]").onclick=()=>{ S.families=S.families.filter(x=>x!==f); S.people.forEach(p=>{ if(keyOf(p.fam||"")===keyOf(f)) p.fam=""; }); pushCfg(true); renderOrg(); };
+  });
   $$("[data-pinon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.pinon].nopin=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-lockon]").forEach(cb=>cb.addEventListener("change",()=>{ S.people[+cb.dataset.lockon].nolock=!cb.checked; pushCfg(true); paintStatus(); }));
   $$("[data-by]").forEach(sel=>sel.addEventListener("change",()=>{ const p=S.people[+sel.dataset.by];
@@ -431,10 +458,9 @@ function renderOrg(){
   paintStatus();
 }
 function famSummary(){
-  const fl=famList(); if(!fl.length) return `<p class="hint">👪 Pon la misma familia a quienes no se pueden tocar entre sí (papás, hermanos…).</p>`;
+  const fl=famList(); if(!fl.length) return `<div class="empty">Todavía no hay familias.</div>`;
   const n=S.people.length; const big=fl.filter(f=>f.names.length>n/2);
-  return `<div class="famsum"><b>👪 Familias</b> <span class="hint">— a nadie le toca alguien de su misma familia</span>
-    ${fl.map(f=>`<div class="famrow"><b>${esc(f.label)}</b> (${f.names.length}): ${f.names.map(esc).join(", ")}</div>`).join("")}
+  return `<div class="famsum">${fl.map((f,i)=>`<div class="famrow"><div style="display:flex;align-items:center;gap:8px"><b style="flex:1">${esc(f.label)} (${f.names.length})</b><button class="x" data-famdel="${i}" aria-label="Borrar familia">✕</button></div><div class="pphone">${f.names.length?f.names.map(esc).join(", "):"Sin integrantes todavía"}</div></div>`).join("")}
     ${big.length?`<div class="err">⚠️ La familia ${esc(big[0].label)} tiene más de la mitad de los participantes: así no se pueden armar las parejas.</div>`:""}</div>`;
 }
 function refreshLinks(){
@@ -469,7 +495,7 @@ async function startDraw(){
 
 async function openAdmin(ev){
   $("#app").innerHTML=`<div class="tombola"><div class="spin"></div><p>Abriendo tu intercambio…</p></div>`;
-  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||"",nopin:!!p.nopin,nolock:!!p.nolock,fam:p.fam||""}))}); save(); } }catch(e){}
+  try{ const c=await dbGet(`${ev}/config`); if(c){ Object.assign(S,{ev,families:(c.families||[]).slice(),title:c.title||S.title,org:c.org||"",orgPhone:c.orgPhone||"",budget:c.budget||"",date:c.date||"",people:(c.people||[]).map(p=>({name:p.name,phone:p.phone||"",by:p.by||"",nopin:!!p.nopin,nolock:!!p.nolock,fam:p.fam||""}))}); save(); } }catch(e){}
   history.replaceState(null,"",location.pathname); startOrg();
 }
 async function startOrg(){ $("#app").classList.add("wide"); if(S.people.length) await pushCfg(true); await refreshOrg(); renderOrg(); clearInterval(window._oiv); window._oiv=setInterval(()=>{ if($("#counts")||$("#spuncount")) refreshOrg(); },12000); }
