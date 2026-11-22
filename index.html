@@ -221,8 +221,8 @@ function effBy(p, people){ if(!p||!p.by) return ""; const t=people.find(x=>keyOf
 // PIN de 3 números: se guarda solo una huella (no el número) para poder entrar desde otro celular
 function pinHash(ev,k,pin){ let h=0x811c9dc5; const str=`${ev}|${k}|${pin}|${KEY}`; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; } return h.toString(16); }
 const pinOk = v => /^\d{3}$/.test(v);
-// Familia de cada persona (si no tiene, usa la de quien elige por ella)
-function famOf(p, people){ const f=(p&&p.fam||"").trim(); if(f) return keyOf(f); const b=effBy(p,people); if(b){ const t=people.find(x=>x.name===b); if(t&&(t.fam||"").trim()) return keyOf(t.fam); } return ""; }
+// Familia de cada persona
+function famOf(p, people){ const f=(p&&p.fam||"").trim(); return f?keyOf(f):""; }   // solo la familia que el organizador le puso
 function famList(){ return (S.families||[]).map(f=>({label:f,key:keyOf(f),names:S.people.filter(p=>famOf(p,S.people)===keyOf(f)).map(p=>p.name)})); }
 let DEV = lsGet("devid"); if(!DEV){ DEV=rand()+rand(); lsSet("devid",DEV); }
 
@@ -346,7 +346,7 @@ function renderOrg(){
             </select></label>
           <label class="bylbl">👪 Familia:
             <select class="by famsel" data-fam="${i}">
-              <option value="">${effBy(p,S.people)?`Sin familia (usa la de ${esc(effBy(p,S.people))})`:"Sin familia"}</option>
+              <option value="">Sin familia</option>
               ${(S.families||[]).map(f=>`<option value="${esc(f)}" ${keyOf(p.fam||"")===keyOf(f)?"selected":""}>${esc(f)}</option>`).join("")}
             </select></label>
           <div class="wbox" id="wb-${i}"></div></div>
