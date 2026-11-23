@@ -153,6 +153,17 @@
   textarea.wedit{min-height:90px;font-size:15px}
   .wrap.wide{max-width:720px}
   @media (min-width:760px){ .wrap.wide ul.people li{padding:14px 6px} }
+  .phgrid{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 4px;align-items:center}
+  .ph{position:relative;width:86px;height:86px;border-radius:12px;overflow:hidden;border:2px solid var(--line);background:#fff}
+  .ph img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+  .phx{position:absolute;top:3px;right:3px;border:0;border-radius:99px;background:rgba(0,0,0,.65);color:#fff;font:inherit;font-size:12px;font-weight:800;padding:3px 7px;cursor:pointer}
+  .phx.sure{background:var(--red)}
+  .phadd{width:86px;height:86px;border-radius:12px;border:2px dashed var(--gold);display:grid;place-items:center;text-align:center;font-size:12px;font-weight:800;color:var(--gold2);cursor:pointer;background:#fffdf7}
+  .rph .phgrid{justify-content:center}
+  .rph .ph{width:110px;height:110px}
+  .lightbox{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.88);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+  .lightbox img{max-width:100%;max-height:82vh;border-radius:12px}
+  .lbx{color:#fff;font-weight:800;margin-top:14px}
   .namechip.taken{opacity:.55}
   input.pin{display:block;width:130px;margin:10px auto 0;text-align:center;font-size:28px;letter-spacing:.4em;font-weight:800;padding:10px}
   canvas#cf{position:fixed;inset:0;pointer-events:none;z-index:5}
@@ -240,7 +251,8 @@ const groupLink = () => BASE_URL + "#" + encode([4,S.ev]);
 const adminLink = () => BASE_URL + "#" + encode([5,S.ev]);
 const cfg = () => ({families:S.families.slice(), title:S.title.trim()||"Intercambio", org:S.org.trim()||"El organizador", orgPhone:phoneNorm(S.orgPhone), budget:S.budget.trim(), date:S.date.trim(), people:S.people.map(p=>({name:p.name,phone:p.phone||"",by:effBy(p,S.people),nopin:!!p.nopin,nolock:!!p.nolock,fam:(p.fam||"").trim()}))});
 let cfgT; function pushCfg(now){ save(); clearTimeout(cfgT); const go=()=>dbPut(`${S.ev}/config`,cfg()).catch(()=>{}); if(now) return go(); cfgT=setTimeout(go,600); }
-async function pull(){ const d=await dbGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
+async function evGet(ev){ const parts=["config","claims","wishes","spun","draw"]; const r=await Promise.all(parts.map(x=>dbGet(`${ev}/${x}`))); const d={}; parts.forEach((x,i)=>{ if(r[i]!=null) d[x]=r[i]; }); return Object.keys(d).length?d:null; }
+async function pull(){ const d=await evGet(S.ev)||{}; LIVE={claims:d.claims||{},wishes:d.wishes||{},spun:d.spun||{},draw:d.draw||null}; return d; }
 const wishOf = n => ((LIVE.wishes[keyOf(n)]||{}).wish||"").trim();
 function drawList(){ if(!LIVE.draw) return []; return Object.values(LIVE.draw).map(decode).filter(Boolean).map(([g,r])=>({g,r})); }
 // Regalo en la pantalla del organizador: se ve completo, con links clicables, y se edita con un botón
@@ -349,7 +361,8 @@ function renderOrg(){
               <option value="">Sin familia</option>
               ${(S.families||[]).map(f=>`<option value="${esc(f)}" ${keyOf(p.fam||"")===keyOf(f)?"selected":""}>${esc(f)}</option>`).join("")}
             </select></label>
-          <div class="wbox" id="wb-${i}"></div></div>
+          <div class="wbox" id="wb-${i}"></div>
+          <div class="phbox" id="pho-${i}"></div></div>
         <button class="x" data-del="${i}" aria-label="Quitar">✕</button></li>`).join("")}</ul>`
       : `<div class="empty">Todavía no hay nadie. Agrega mínimo 3 personas.</div>`}
       <div class="ok" id="counts"></div>
@@ -428,7 +441,7 @@ function renderOrg(){
     p.by=sel.value;
     if(p.by) S.people.forEach(x=>{ if(keyOf(x.by||"")===keyOf(p.name)) x.by=""; });   // quien depende de otro no puede tener dependientes
     pushCfg(true); renderOrg(); }));
-  S.people.forEach((p,i)=>paintWish(i));
+  S.people.forEach((p,i)=>{ paintWish(i); photoBlock(S.ev,keyOf(p.name),true,$("#pho-"+i)); });
 
   // link
   const gc=$("#gl-copy"); if(gc) gc.onclick=async()=>{ try{ await navigator.clipboard.writeText(groupLink()); gc.textContent="¡Copiado!"; }catch(e){ const b=$("#gl-box"); b.style.display="block"; b.value=groupLink(); b.select(); gc.textContent="Cópialo ↓"; } };
@@ -511,7 +524,7 @@ function keepStorage(){ try{ if(navigator.storage && navigator.storage.persist) 
 async function renderJoin(ev){ keepStorage(); $("#app").classList.remove("wide");
   clearInterval(PIV);
   shell(`<div class="tombola"><div class="spin"></div><p>Cargando…</p></div>`);
-  let d; try{ d=await dbGet(ev); }catch(e){ shell(`<div class="stage"><h1>Sin conexión 📶</h1><div class="card" style="color:var(--ink)">No pude cargar el intercambio. Revisa tu internet.<br><br><button class="btn red block" onclick="route()">Intentar otra vez</button></div></div>`); return; }
+  let d; try{ d=await evGet(ev); }catch(e){ shell(`<div class="stage"><h1>Sin conexión 📶</h1><div class="card" style="color:var(--ink)">No pude cargar el intercambio. Revisa tu internet.<br><br><button class="btn red block" onclick="route()">Intentar otra vez</button></div></div>`); return; }
   if(!d||!d.config||!(d.config.people||[]).length){ shell(`<div class="stage"><h1>Todavía no está listo 🎁</h1><div class="card" style="color:var(--ink)">El organizador todavía no agrega a los participantes. Intenta más tarde.</div></div>`); return; }
   const mine=lsGet("me-"+ev);
   if(mine){ const cl=(d.claims||{})[mine]; if(cl && cl.dev===DEV) return renderMe(ev,mine,d); lsDel("me-"+ev); }
@@ -599,6 +612,7 @@ function renderMe(ev,k,d){
         <button class="btn red block" data-wsave="${i}" style="margin-top:8px">Guardar ${p.self?"mi":"su"} regalo</button>
         <div class="err" id="werr-${i}"></div>
       </div>
+      <div id="myph-${i}" style="margin-top:10px"></div>
       <div class="rsec"><h3>🎰 ${p.self?"Tu ruleta":`Ruleta de ${esc(p.name)}`}</h3><div id="rb-${i}"></div></div>
     </div>`; }).join("")+
     `<p class="foot">Entraste como ${esc(me)}. Si no eres tú, pídele a ${esc(c.org)} que te libere.</p>`);
@@ -624,6 +638,7 @@ function renderMe(ev,k,d){
 
   list.forEach((p,i)=>{
     const pk=keyOf(p.name);
+    photoBlock(ev,pk,true,$("#myph-"+i));
     let hadWish=!!(((d.wishes||{})[pk]||{}).wish);
     $(`[data-wedit="${i}"]`).onclick=()=>{ $("#wview-"+i).style.display="none"; $("#wform-"+i).style.display=""; $("#w-"+i).focus(); };
     $(`[data-wsave="${i}"]`).onclick=async e=>{
@@ -644,14 +659,16 @@ function renderMe(ev,k,d){
       <div class="lbl" style="text-align:center">${p.self?"Te tocó darle regalo a":`A ${esc(p.name)} le tocó darle regalo a`}</div>
       <div class="who" style="text-align:center">${esc(r)}</div>
       <div class="giftwish"><b>🎁 Lo que quiere</b><div>${((d.wishes||{})[keyOf(r)]||{}).wish?linkify(d.wishes[keyOf(r)].wish):"Todavía no pone qué quiere. Vuelve a abrir este link más tarde 😉"}</div></div>
+      <div class="rph" data-rph="${i}"></div>
       <p class="secret" style="text-align:center">🤫 Es secreto, no le digas a nadie.</p>
       ${c.orgPhone?`<a class="btn wa block" style="padding:13px" target="_blank" rel="noopener" href="${waLink(c.orgPhone, `✅ Ya giré la ruleta${p.self?"":` de ${p.name}`} del ${c.title} — ${me}`)}">Avisarle a ${esc(c.org)}</a>`:""}`;
-    if((d.spun||{})[pk]){ rb.innerHTML=result(); return; }
+    const showRph=()=>photoBlock(ev,keyOf(r),false,rb.querySelector(`[data-rph="${i}"]`));
+    if((d.spun||{})[pk]){ rb.innerHTML=`<div class="reveal show" style="animation:none">${result()}</div>`; showRph(); return; }
     const names=people.map(x=>x.name).filter(n=>n!==p.name); if(!names.includes(r)) names.push(r);
     rb.innerHTML=`<div class="wheelwrap"><div class="pointer"></div><canvas id="wheel-${i}"></canvas><div class="hub">🎁</div></div>
       <button class="btn red block" id="spin-${i}" style="font-size:20px;padding:16px">🎰 ¡Pícale!</button>`;
     mountWheel($("#wheel-"+i), $("#spin-"+i), names, r, async()=>{ try{ await dbPut(`${ev}/spun/${pk}`,Date.now()); }catch(e){}
-      confetti(); rb.innerHTML=`<div class="reveal show">${result()}</div>`; $("#pc-"+i).scrollIntoView({block:"start",behavior:"smooth"}); });
+      confetti(); rb.innerHTML=`<div class="reveal show">${result()}</div>`; showRph(); $("#pc-"+i).scrollIntoView({block:"start",behavior:"smooth"}); });
   });
   if(!dr){
     PIV=setInterval(async()=>{ try{ const x=await dbGet(`${ev}/draw/${k}`); if(x){ clearInterval(PIV); renderJoin(ev); return; } const cl=await dbGet(`${ev}/claims/${k}`); if(!cl||cl.dev!==DEV){ clearInterval(PIV); lsDel("me-"+ev); renderJoin(ev); } }catch(e){} },15000);
@@ -692,6 +709,42 @@ function mountWheel(cv, btn, names, r, onDone){
       const cur=Math.floor(norm(-Math.PI/2-rot)/seg); if(cur!==last){ last=cur; if(navigator.vibrate) try{navigator.vibrate(8)}catch(_){} }
       if(t<1) requestAnimationFrame(frame); else setTimeout(onDone,450);
     })(start);
+  };
+}
+
+// ================== Fotos del regalo ==================
+const MAXPH=3;
+function compressPhoto(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), img=new Image();
+    img.onload=()=>{ const max=900; let w=img.naturalWidth, h=img.naturalHeight; const sc=Math.min(1,max/Math.max(w,h)); w=Math.round(w*sc); h=Math.round(h*sc);
+      const c=document.createElement("canvas"); c.width=w; c.height=h; const x=c.getContext("2d"); x.fillStyle="#fff"; x.fillRect(0,0,w,h); x.drawImage(img,0,0,w,h); URL.revokeObjectURL(url);
+      let q=0.72, d=c.toDataURL("image/jpeg",q); while(d.length>190000 && q>0.35){ q-=0.1; d=c.toDataURL("image/jpeg",q); } res(d); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error("foto")); };
+    img.src=url;
+  });
+}
+function openPhoto(src){ const o=document.createElement("div"); o.className="lightbox"; o.innerHTML=`<img src="${src}" alt="Foto del regalo"><div class="lbx">✕ Cerrar</div>`; o.onclick=()=>o.remove(); document.body.appendChild(o); }
+// Pinta las fotos de una persona dentro de "el". editable = puede subir y borrar
+async function photoBlock(ev,k,editable,el){
+  if(!el) return;
+  el.innerHTML=`<div class="phgrid"><span class="hint">Cargando fotos…</span></div>`;
+  let ph={}; try{ ph=await dbGet(`${ev}/photos/${k}`)||{}; }catch(e){ el.innerHTML=editable?`<div class="err">No se pudieron cargar las fotos.</div>`:""; return; }
+  const ids=Object.keys(ph).sort();
+  if(!editable && !ids.length){ el.innerHTML=""; return; }
+  el.innerHTML=`<div class="phgrid">${ids.map(id=>`<div class="ph"><img src="${ph[id]}" data-open="${id}" alt="Foto">${editable?`<button class="phx" data-phdel="${id}" aria-label="Borrar foto">✕</button>`:""}</div>`).join("")}
+    ${editable && ids.length<MAXPH?`<label class="phadd"><input type="file" accept="image/*" hidden><span>📷<br>Agregar foto</span></label>`:""}</div>
+    ${editable?`<div class="hint">${ids.length?`${ids.length} de ${MAXPH} fotos`:"Puedes subir hasta 3 fotos del regalo (opcional)."}</div><div class="err" data-pherr></div>`:""}`;
+  el.querySelectorAll("[data-open]").forEach(im=>im.onclick=()=>openPhoto(im.src));
+  if(!editable) return;
+  el.querySelectorAll("[data-phdel]").forEach(b=>b.onclick=async()=>{
+    if(!b.classList.contains("sure")){ b.classList.add("sure"); b.textContent="¿Borrar?"; setTimeout(()=>{ if(b.isConnected){ b.classList.remove("sure"); b.textContent="✕"; } },3000); return; }
+    b.textContent="…"; try{ await dbDel(`${ev}/photos/${k}/${b.dataset.phdel}`); }catch(e){} photoBlock(ev,k,true,el); });
+  const inp=el.querySelector("input[type=file]"); if(inp) inp.onchange=async()=>{
+    const f=inp.files&&inp.files[0]; if(!f) return; const err=el.querySelector("[data-pherr]"), lab=el.querySelector(".phadd span");
+    lab.innerHTML="Subiendo…";
+    try{ const data=await compressPhoto(f); await dbPut(`${ev}/photos/${k}/${Date.now().toString(36)}`,data); photoBlock(ev,k,true,el); }
+    catch(e){ lab.innerHTML="📷<br>Agregar foto"; err.textContent = e.message==="foto" ? "No se pudo leer esa foto. Prueba con otra." : "No se pudo subir. Revisa tu internet."; }
   };
 }
 
